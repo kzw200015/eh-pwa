@@ -1,7 +1,11 @@
 # ---------- 构建：前端 ----------
+# 前端产物与平台无关，构建阶段固定跑在构建机自己的平台上（$BUILDPLATFORM），构建多架构镜像时不用在模拟器里跑前端构建。
+# 构建阶段带的 Bun 也要取构建机平台的，所以单独起一个阶段，不直接 COPY --from 镜像（那样会取目标平台的）
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-alpine AS bun
+
 # 前端的类型检查 vue-tsc 要靠 Node 的模块加载改写 TypeScript，放在 Bun 下跑认不出 .vue，所以构建阶段用 Node 镜像再带上 Bun
-FROM node:24-alpine AS build
-COPY --from=oven/bun:1.4.2-alpine /usr/local/bin/bun /usr/local/bin/bun
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 

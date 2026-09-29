@@ -15,20 +15,58 @@
 
 ## 部署
 
-需要一个 PostgreSQL 数据库。服务启动时会自动执行迁移，数据库账号要有建表、改表的权限。
+用 Docker Compose 连同 PostgreSQL 一起起。服务启动时会自动执行迁移，不用手工建表。
 
-```bash
-docker run -d --name eh-pwa -p 8000:8000 \
-  -e DATABASE_URL=postgres://用户:口令@主机:5432/eh_pwa \
-  -e SECRET_KEY="$(openssl rand -hex 32)" \
-  -e ALLOW_REGISTRATION=true \
-  -e TZ=Asia/Shanghai \
-  kzw200015/eh-pwa
+新建一个目录，放入 `compose.yaml`：
+
+```yaml
+services:
+  app:
+    image: kzw200015/eh-pwa
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://eh_pwa:${POSTGRES_PASSWORD}@db:5432/eh_pwa
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOW_REGISTRATION: "true"
+      TZ: Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eh_pwa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: eh_pwa
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eh_pwa -d eh_pwa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:
 ```
 
-打开 `http://localhost:8000`，注册第一个账号后，把 `ALLOW_REGISTRATION` 去掉（默认关闭）再重启容器，然后在设置页绑定 e 站 Cookie。
+在同一目录生成 `.env` 存放密钥（Compose 会自动读取），然后启动：
 
-`SECRET_KEY` 请生成一次后固定保存：换掉它，所有人都要重新登录。
+```bash
+echo "SECRET_KEY=$(openssl rand -hex 32)" > .env
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
+docker compose up -d
+```
+
+打开 `http://localhost:8000`，注册第一个账号后，把 `compose.yaml` 里的 `ALLOW_REGISTRATION` 删掉（默认关闭）再执行一次 `docker compose up -d`，然后在设置页绑定 e 站 Cookie。
+
+`.env` 请妥善保存：换掉 `SECRET_KEY`，所有人都要重新登录。已有 PostgreSQL 的话可以去掉 `db` 服务，把 `DATABASE_URL` 指向自己的数据库，数据库账号要有建表、改表的权限。
+
+升级：`docker compose pull && docker compose up -d`。
 
 | 环境变量             | 默认值         | 说明                                                             |
 | -------------------- | -------------- | ---------------------------------------------------------------- |
