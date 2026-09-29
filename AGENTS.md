@@ -49,7 +49,7 @@ Bun 的版本写在根目录 `package.json` 的 `packageManager` 与 `Dockerfile
 
 ## 提交与 Pull Request
 
-沿用 `feat:`、`fix:`、`refactor:`、`chore:` 前缀，用简体中文概述改动，每次提交只做一件事。PR 说明解决的问题、改动后的行为和验证结果，关联相关 issue，界面变化附截图。
+沿用 `feat:`、`fix:`、`refactor:`、`docs:`、`chore:` 前缀（只改文档的用 `docs:`），用简体中文概述改动，每次提交只做一件事。PR 说明解决的问题、改动后的行为和验证结果，关联相关 issue，界面变化附截图。
 
 ## 安全
 
