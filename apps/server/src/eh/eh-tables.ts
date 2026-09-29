@@ -76,8 +76,8 @@ export const ehPreferences = pgTable(
     userId: userId(),
     /* 列上不限定取值，分类名由偏好接口的 schema 把关 */
     categories: text()
+      .$type<GalleryCategory>()
       .array()
-      .$type<GalleryCategory[]>()
       .notNull()
       .default(sql`'{}'`),
     /* 空表示不限 */
