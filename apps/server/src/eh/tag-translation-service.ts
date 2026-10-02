@@ -8,7 +8,7 @@ import type { TagRef } from "@server/eh/upstream/metadata"
 import { createLogger } from "@server/logger"
 
 /*
- * 标签译名：从 EhTagTranslation 手动同步进库，读的时候按条查、进程内缓存（见 ADR-0005）。
+ * 标签译名：从 EhTagTranslation 手动同步进库，读的时候按条查、进程内缓存（见 ADR-0004）。
  *
  * 一次响应里的标签一起备齐：缓存里没有的攒到一起，一条 SQL 查回来——一页搜索结果几百个标签，也只查一次库。
  * 同步之后整个换一份新缓存；查询途中撞上同步的，结果写进它开始时的那份旧缓存，随它一起丢掉，不会把旧译名留到新缓存里。

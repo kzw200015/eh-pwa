@@ -38,7 +38,7 @@ const { ready, loadError, reload } = useGalleryPreferences()
     <Skeleton class="h-40 w-full" />
   </div>
   <RouterView v-else v-slot="{ Component }">
-    <!-- 搜索、历史与详情各保留一份，换图集复用详情：留住的是滚动位置、输入与已翻的页，数据在查询缓存里（见 ADR-0006）。 -->
+    <!-- 搜索、历史与详情各保留一份，换图集复用详情：留住的是滚动位置、输入与已翻的页，数据在查询缓存里（见 ADR-0005）。 -->
     <KeepAlive>
       <component :is="Component" />
     </KeepAlive>

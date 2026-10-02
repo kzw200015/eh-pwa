@@ -2,7 +2,7 @@ import { PiniaColada, type QueryCache, type UseInfiniteQueryData, type UseQueryE
 import type { App } from "vue"
 
 /**
- * 服务端数据统一交给 Pinia Colada（见 ADR-0006）。要在 Pinia 之后安装。
+ * 服务端数据统一交给 Pinia Colada（见 ADR-0005）。要在 Pinia 之后安装。
  *
  * 数据一律当场就算过期（staleTime 为 0）：挂载、换参数、回到被 KeepAlive 留着的页面（由页面在 onActivated 里 refresh）
  * 都重读一次，在读时复用那次请求。不在窗口聚焦、网络重连时重读，也不自动重试：失败交给用户点重试。

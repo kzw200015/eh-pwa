@@ -19,7 +19,7 @@
 ├── CONTEXT.md
 ├── docs/adr/
 │   ├── 0001-xxx.md
-│   └── 0003-xxx.md
+│   └── 0002-xxx.md
 ├── apps/
 │   ├── server/
 │   └── web/

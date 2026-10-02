@@ -1,6 +1,6 @@
 # apps/server
 
-后端：Hono + Drizzle + PostgreSQL，由 Bun 直接运行 TypeScript 源码（见 ADR-0004、ADR-0007、ADR-0008），没有构建步骤。全仓通用的约定见根目录 `AGENTS.md`，与 e 站打交道的部分另见 `src/eh/AGENTS.md`。
+后端：Hono + Drizzle + PostgreSQL，由 Bun 直接运行 TypeScript 源码（见 ADR-0002、ADR-0003），没有构建步骤。全仓通用的约定见根目录 `AGENTS.md`，与 e 站打交道的部分另见 `src/eh/AGENTS.md`。
 
 ## 结构
 
@@ -28,9 +28,9 @@
 
 响应：成功时 `c.json(数据)`，回 200；只回成败的写接口 `c.body(null, 204)`，前端经 `parseResponse` 拿到的是 `undefined`（回 200 空体的话会被推断成空串）；图片流直接返回 `Response`。失败抛 `http-error.ts` 的 `HttpError`（常用的有 `badRequest`、`notFound` 这类工厂函数），由 `app.ts` 的 `onError` 统一回成 `{statusCode, message, error}`，`message` 是给用户看的中文；入参校验失败回 400，`message` 是一组去重的文案（由 `validate.ts` 抛出）；不存在的路径与不对的方法由 `notFound` 回 404。未预料的异常回 500，原文只进日志。e 站那些可预期的失败见 `src/eh/AGENTS.md`。
 
-鉴权不用 Passport（见 ADR-0001、ADR-0007）：`auth/tokens.ts` 用 Hono 自带的 `hono/utils/jwt` 签发与校验 `Authorization: Bearer` 令牌，`auth/session.ts` 的两个中间件把当前本站账号 id 放进上下文，处理函数用 `c.get("userId")` 取：要登录的路由挂 `signedIn`，没登录回 401；公开接口上要认出登录者的挂 `maybeSignedIn`，没登录时是 `null`。中间件逐条写在路由上、排在 `validate` 之前，没登录的请求先拿到 401；不在一组路由上 `use`：`use` 按路径前缀挂，eh 下要登录的路由与公开的图片接口共用前缀。公开接口的清单由接口测试按整张路由表锁住，新加的路由漏了 `signedIn` 会让那条测试失败。
+鉴权不用 Passport（见 ADR-0001）：`auth/tokens.ts` 用 Hono 自带的 `hono/utils/jwt` 签发与校验 `Authorization: Bearer` 令牌，`auth/session.ts` 的两个中间件把当前本站账号 id 放进上下文，处理函数用 `c.get("userId")` 取：要登录的路由挂 `signedIn`，没登录回 401；公开接口上要认出登录者的挂 `maybeSignedIn`，没登录时是 `null`。中间件逐条写在路由上、排在 `validate` 之前，没登录的请求先拿到 401；不在一组路由上 `use`：`use` 按路径前缀挂，eh 下要登录的路由与公开的图片接口共用前缀。公开接口的清单由接口测试按整张路由表锁住，新加的路由漏了 `signedIn` 会让那条测试失败。
 
-数据访问用 Drizzle（`drizzle-orm/bun-sql`，连接是 Bun 自带的 `SQL`，第一次查询就把连接池开满，默认 10 个），表结构写在各领域的 `*-tables.ts`，服务直接从那里引用表，连接直接引 `database`；不用 Drizzle 的关系查询，所以连接上不挂表结构，`database/` 也就不必认识各领域的表。时间列只存到毫秒（`timestamp(3)`），取出来是 `Date`：阅读历史的游标要把阅读时间原样交回数据库比较，库里存着微秒的话经 `Date` 一截就会漏行，upsert 的冲突分支自己写 `` updatedAt: sql`now()` ``。服务启动时先由迁移器执行 `drizzle/` 下没执行过的迁移，再开始监听；基线迁移写成幂等：在已有这些表的库上只登记不改动，在空库上建出同样的结构。Drizzle 用的是 1.0 的 RC（`drizzle-orm` 与 `drizzle-kit` 版本写死、一起升）：迁移按目录一个一个放（`时间戳_名字/migration.sql` 加 `snapshot.json`），迁移器按目录名登记，库里没登记的都会补上，不看时间先后；0.x 按时间戳只跑比最后一条更晚的，会跳过。表结构里数组列的 `$type` 标注的是元素类型（`text().$type<GalleryCategory>().array()`）。
+数据访问用 Drizzle（`drizzle-orm/bun-sql`，连接是 Bun 自带的 `SQL`，第一次查询就把连接池开满，默认 10 个），表结构写在各领域的 `*-tables.ts`，服务直接从那里引用表，连接直接引 `database`；不用 Drizzle 的关系查询，所以连接上不挂表结构，`database/` 也就不必认识各领域的表。时间列只存到毫秒（`timestamp(3)`），取出来是 `Date`：阅读历史的游标要把阅读时间原样交回数据库比较，库里存着微秒的话经 `Date` 一截就会漏行，upsert 的冲突分支自己写 `` updatedAt: sql`now()` ``。服务启动时先由迁移器执行 `drizzle/` 下没执行过的迁移，再开始监听；基线迁移写成幂等：在已有这些表的库上只登记不改动，在空库上建出同样的结构。Drizzle 用的是 1.0 的 RC（`drizzle-orm` 与 `drizzle-kit` 版本写死、一起升）：迁移按目录一个一个放（`时间戳_名字/migration.sql` 加 `snapshot.json`），迁移器按目录名登记，库里没登记的都会补上，不看时间先后。表结构里数组列的 `$type` 标注的是元素类型（`text().$type<GalleryCategory>().array()`）。
 
 出网只有一个出口：`outbound.ts` 的 `outbound`（形状就是 fetch，底下是 Bun 的 fetch，类型与真实实现在 `outbound-fetch.ts`），不跟随重定向，等响应头与两次数据之间各有超时（由它自己计；连接阶段约 10 秒的超时靠 Bun 的默认行为，见 `outbound-fetch.ts`），所有出网请求共用同一个 User-Agent 与超时配置；访问 e 站、图床、标签译名数据源都经它，测试也只在这里替换（`outbound.ts` 的 `replaceOutbound`）。`outbound-fetch.ts` 不读配置，次接缝的测试直接用它。一个请求里要同时等两件互不依赖的事时用 `Promise.all`。进程内缓存用 `lru-cache`：同一个 key 的并发加载靠它的 `fetch()`（一定有值的用 `forceFetch()`）只跑一次、失败不进缓存，不另加锁。
 

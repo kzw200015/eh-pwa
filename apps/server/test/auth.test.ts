@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { register, SECRET_KEY, startApp, type TestApp } from "./support/app"
 import { createDatabase, sql } from "./support/database"
 
-/* Kotlin 版（沿用自更早的 Go 版）生成的真实哈希，旧账号的密码必须照样验得过 */
+/* 库里已有账号的真实哈希，这些账号的密码必须照样验得过 */
 const LEGACY_HASH = "$argon2id$v=19$m=65536,t=2,p=1$GWJ0cHAGWKo9G+ZbnLQTDA$DoZHSlziwVSiiOUfmY5r/+Vzuq4jc9hK6gaeBrbid8c"
 const LEGACY_PASSWORD = "correct horse 电池"
 

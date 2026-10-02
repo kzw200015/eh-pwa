@@ -35,7 +35,7 @@ export async function search(
   }
 }
 
-/** 详情只查一次元数据，评论另有接口懒加载，大图地址逐页另签。阅读进度另有接口（见 ADR-0006）。 */
+/** 详情只查一次元数据，评论另有接口懒加载，大图地址逐页另签。阅读进度另有接口（见 ADR-0005）。 */
 export async function detail(ref: GalleryRef): Promise<galleryCatalog.GalleryDetail> {
   const gallery = await galleryCatalog.detail(ref)
   if (!gallery) {

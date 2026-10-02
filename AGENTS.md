@@ -2,9 +2,9 @@
 
 ## 项目结构
 
-eh-pwa 提供账号与 e 站图集浏览。领域术语见 `CONTEXT.md`，架构决策见 `docs/adr/`，辅助工作流见 `docs/agents/`。仓库是 Bun 工作区（见 ADR-0003、ADR-0004），三个包：
+eh-pwa 提供账号与 e 站图集浏览。领域术语见 `CONTEXT.md`，架构决策见 `docs/adr/`，辅助工作流见 `docs/agents/`。仓库是 Bun 工作区（见 ADR-0002），三个包：
 
-- `apps/server`：后端，Hono + Drizzle + PostgreSQL，由 Bun 直接运行 TypeScript 源码。前端经 `hono/client` 从后端导出的 `App` 类型推断每条接口（见 ADR-0007、ADR-0008）。
+- `apps/server`：后端，Hono + Drizzle + PostgreSQL，由 Bun 直接运行 TypeScript 源码。前端经 `hono/client` 从后端导出的 `App` 类型推断每条接口（见 ADR-0003）。
 - `apps/web`：前端，Vue 3 + Vite。前端工具链（Vite、vue-tsc、Vitest）跑在 Node 上：vue-tsc 在 Bun 下认不出 `.vue`，所以本机除了 Bun 还要装 Node 24。
 - `packages/shared`（包名 `@eh-pwa/shared`）：两端都要执行的规则（取值范围、提交前预校验、当场改本地数据的规则），不构建，两端直接引用源码。接口收什么、回什么都定义在后端，前端经 `hono/client` 推断，不经共享包。
 
