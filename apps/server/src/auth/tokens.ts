@@ -1,4 +1,4 @@
-import { jwtVerify, SignJWT } from "jose"
+import { Jwt } from "hono/utils/jwt"
 import { z } from "zod"
 
 import { env } from "@server/config"
@@ -15,11 +15,7 @@ const subject = numeric(z.int().positive(), "令牌载荷不合法")
 
 export function sign(userId: number): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
-  return new SignJWT({ sub: String(userId) })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setIssuedAt(now)
-    .setExpirationTime(now + Math.floor(env.TOKEN_TTL / 1000))
-    .sign(tokenKey)
+  return Jwt.sign({ sub: String(userId), iat: now, exp: now + Math.floor(env.TOKEN_TTL / 1000) }, tokenKey)
 }
 
 /** 从 Authorization 头认出账号 id。没带令牌、签名不对、载荷坏了、已过期，一律当作没登录，而不是报错。 */
@@ -30,7 +26,7 @@ export async function identify(authorization: string | undefined): Promise<numbe
   }
   try {
     /* 只认 HS256：照令牌头里自称的 alg 去验，等于让攻击者自己挑用哪把锁（alg: none） */
-    const { payload } = await jwtVerify(token, tokenKey, { algorithms: ["HS256"] })
+    const payload = await Jwt.verify(token, tokenKey, "HS256")
     const parsed = subject.safeParse(payload.sub)
     return parsed.success ? parsed.data : null
   } catch {

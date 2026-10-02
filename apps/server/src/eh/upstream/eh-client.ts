@@ -1,4 +1,5 @@
 import type { GalleryCategory, GalleryMinRating } from "@eh-pwa/shared/eh"
+import { z } from "zod"
 
 import { ANONYMOUS, cookieHeader, SITES, type EhAccess, type EhCredential } from "@server/eh/upstream/access"
 import { categoryFilter } from "@server/eh/upstream/categories"
@@ -25,7 +26,7 @@ import {
   type GallerySlice,
   type ImagePage,
 } from "@server/eh/upstream/parse"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
 
 /** 一次搜索的条件，校验见搜索路由上的 schema。 */
@@ -92,6 +93,71 @@ export interface ImageStream {
 /** 元数据接口一次最多查这么多本。由调用方按它切批，各批各自成败，一批失败不连累别的批。 */
 export const METADATA_BATCH_SIZE = 25
 
+/**
+ * e 站 JSON 里数字的写法不统一：gid 是数字，filecount、rating 这些是字符串（"329"、"4.68"）。两种都收下；
+ * 缺省、null 和空串都算 0，别让一个没填的字段废掉整批元数据。
+ */
+const looseNumber = z
+  .union([z.number(), z.string()])
+  .nullish()
+  .transform((value, ctx) => {
+    if (value === undefined || value === null || value === "") {
+      return 0
+    }
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) {
+      ctx.addIssue({ code: "custom", message: `不是数字：${value}` })
+      return z.NEVER
+    }
+    return parsed
+  })
+
+/* 缺省或不是字符串的文字算空串 */
+const looseText = z.string().catch("")
+
+/* 标题与标签里带着 HTML 实体 */
+const entityText = looseText.transform(decodeEntities)
+
+/** 元数据接口里的一本：上游的数字、HTML 实体与时间在协议边界统一转换。 */
+const metadataSchema = z
+  .object({
+    gid: looseNumber,
+    token: looseText,
+    title: entityText,
+    title_jpn: entityText,
+    category: looseText,
+    thumb: looseText,
+    uploader: looseText,
+    posted: looseNumber,
+    filecount: looseNumber,
+    rating: looseNumber,
+    tags: z.array(z.coerce.string().transform((tag) => toTag(decodeEntities(tag)))).catch([]),
+    filesize: looseNumber,
+    torrentcount: looseNumber,
+    expunged: z.boolean().catch(false),
+  })
+  .transform((entry): GalleryMetadata => ({
+    gid: entry.gid,
+    token: entry.token,
+    title: entry.title,
+    titleJpn: entry.title_jpn,
+    category: entry.category,
+    thumbnailUrl: entry.thumb,
+    uploader: entry.uploader,
+    postedAt: new Date(entry.posted * 1000).toISOString(),
+    fileCount: entry.filecount,
+    rating: entry.rating,
+    tags: entry.tags,
+    fileSize: entry.filesize,
+    torrentCount: entry.torrentcount,
+    expunged: entry.expunged,
+  }))
+
+/** 元数据接口的响应。单个图集被删或转私有时，那一条会变成 { gid, error }，解成 null 由调用方跳过，别让整批作废。 */
+const gdataSchema = z.object({
+  gmetadata: z.array(z.union([z.object({ error: z.string().min(1) }).transform(() => null), metadataSchema])),
+})
+
 /** 配额用尽时 e 站不报错，而是把大图换成一张提示图：表站 ehgt.org/g/509.gif，里站 exhentai.org/img/509.gif，小图叫 509s.gif。 */
 const QUOTA_IMAGES = new Set([
   "https://ehgt.org/g/509.gif",
@@ -115,7 +181,7 @@ interface UpstreamResponse {
  * 出网只有 outbound 这一个出口。
  */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 export async function search(
   access: EhAccess,
@@ -152,20 +218,16 @@ export async function fetchMetadata(refs: GalleryRef[]): Promise<Map<string, Gal
   if (typeof response.error === "string" && response.error) {
     throw unavailable("e 站元数据接口拒绝了请求", `error=${response.error}`)
   }
-  if (!Array.isArray(response.gmetadata)) {
-    throw unavailable("e 站元数据接口没有返回图集数据")
+  const parsed = gdataSchema.safeParse(response)
+  if (!parsed.success) {
+    throw unavailable("e 站元数据接口返回的图集数据格式不对", z.prettifyError(parsed.error))
   }
   const requested = new Set(refs.map(refKey))
   const batch = new Map<string, GalleryMetadata>()
-  for (const entry of response.gmetadata) {
-    if (!isRecord(entry)) {
-      throw unavailable("e 站元数据接口返回的图集数据格式不对", `entry=${JSON.stringify(entry)}`)
-    }
-    /* 单个图集被删或转私有时，那一条会变成 { gid, error }，跳过它，别让整批作废 */
-    if (entry.error) {
+  for (const metadata of parsed.data.gmetadata) {
+    if (metadata === null) {
       continue
     }
-    const metadata = toMetadata(entry)
     if (!requested.has(refKey(metadata))) {
       throw unavailable("e 站返回的图集定位信息与请求不一致")
     }
@@ -393,42 +455,4 @@ function withinQuota(image: ImagePage): ImagePage {
     throw quotaExceeded()
   }
   return image
-}
-
-/**
- * 上游的数字、HTML 实体与时间在协议边界统一转换。e 站 JSON 里数字的写法不统一：gid 是数字，filecount、rating
- * 这些是字符串（"329"、"4.68"）。两种都收下；缺省、null 和空串都算 0，别让一个没填的字段废掉整批元数据。
- */
-function toMetadata(entry: Record<string, unknown>): GalleryMetadata {
-  const text = (field: string) => {
-    const value = entry[field]
-    return typeof value === "string" ? value : ""
-  }
-  const number = (field: string) => {
-    const value = entry[field]
-    if (value === undefined || value === null || value === "") {
-      return 0
-    }
-    const parsed = Number(value)
-    if (!Number.isFinite(parsed)) {
-      throw unavailable("e 站元数据的格式不对", `${field}=${String(value)}`)
-    }
-    return parsed
-  }
-  return {
-    gid: number("gid"),
-    token: text("token"),
-    title: decodeEntities(text("title")),
-    titleJpn: decodeEntities(text("title_jpn")),
-    category: text("category"),
-    thumbnailUrl: text("thumb"),
-    uploader: text("uploader"),
-    postedAt: new Date(number("posted") * 1000).toISOString(),
-    fileCount: number("filecount"),
-    rating: number("rating"),
-    tags: Array.isArray(entry.tags) ? entry.tags.map((tag) => toTag(decodeEntities(String(tag)))) : [],
-    fileSize: number("filesize"),
-    torrentCount: number("torrentcount"),
-    expunged: entry.expunged === true,
-  }
 }

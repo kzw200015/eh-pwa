@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { badGateway } from "@server/http-error"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
 import { failureReason } from "@server/outbound-fetch"
 
@@ -30,7 +30,7 @@ interface TagTranslationRelease {
   entries: { namespace: string; raw: string; name: string }[]
 }
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /** 拉不到或拉到的不对：原因只进日志，前端只看到一句中文。 */
 function unavailable(message: string, detail: unknown) {

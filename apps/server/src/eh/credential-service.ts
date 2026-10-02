@@ -4,7 +4,7 @@ import { database } from "@server/database/connection"
 import { ehCredentials } from "@server/eh/eh-tables"
 import { accessOf, ANONYMOUS, type EhAccess, type EhCredential } from "@server/eh/upstream/access"
 import * as ehClient from "@server/eh/upstream/eh-client"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 
 /*
  * 本站账号绑定的 e 站凭据，以及每次上游请求用哪个身份、走哪个站。
@@ -12,7 +12,7 @@ import { Logger } from "@server/logger"
  * 凭据每次都从库里读（按唯一索引查一行），不在进程里缓存：换绑、解绑当场生效，也就没有「作废缓存时撞上在途回填」这类问题。
  */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /** e 站账号的绑定状态 */
 interface CredentialStatus {
@@ -37,7 +37,7 @@ export async function bind(userId: number, credential: EhCredential): Promise<Cr
     .insert(ehCredentials)
     .values({ userId, ...row })
     .onConflictDoUpdate({ target: ehCredentials.userId, set: { ...row, updatedAt: sql`now()` } })
-  logger.log(`已绑定 e 站凭据 userId=${userId} hasExAccess=${hasExAccess}`)
+  logger.info(`已绑定 e 站凭据 userId=${userId} hasExAccess=${hasExAccess}`)
   return { bound: true, memberId: credential.ipbMemberId, hasExAccess }
 }
 

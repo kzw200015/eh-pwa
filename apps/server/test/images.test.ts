@@ -102,11 +102,11 @@ describe("签名地址", () => {
   })
 
   it("同一窗口里签出的地址一模一样，有效期不短于配置值，过期后不再放行、重新签一份就能接着取图", async () => {
-    const r = await reader((request) => gallery(5, 20)(request))
-    const ref = nextRef()
-    /* 窗口是有效期（24 小时）的四分之一；起点刻意不落在整点上 */
+    /* 窗口是有效期（24 小时）的四分之一；起点刻意不落在整点上。先拨好时钟再注册：令牌的签发时间不能晚于验它时的时钟 */
     const start = new Date("2026-09-05T10:01:00Z").getTime()
     vi.useFakeTimers({ toFake: ["Date"], now: start })
+    const r = await reader((request) => gallery(5, 20)(request))
+    const ref = nextRef()
     const since = t.outbound.requests.length
     const first = await r.url(ref, 1)
     /* 签名只在本机算，不访问 e 站 */

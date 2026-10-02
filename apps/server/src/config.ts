@@ -1,4 +1,5 @@
 import { utf8Length } from "@eh-pwa/shared/text"
+import ms, { type StringValue } from "ms"
 import { z } from "zod"
 
 /*
@@ -6,18 +7,14 @@ import { z } from "zod"
  * （已被 Git 忽略；Bun 启动时就会把当前目录的 .env 读进环境变量），部署时由容器环境给出。清单见 .env.example。
  */
 
-/** 每个单位合多少毫秒 */
-const DURATION_UNITS: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }
-
-/** 时长写成 30d、24h、30s、500ms 这样的「整数 + 单位」，解析成毫秒。 */
+/** 时长按 ms 的写法（30d、24h、1.5h、500ms、2 days；光写数字是毫秒），解析成毫秒；解不开或不是正数的不收。 */
 const duration = z.string().transform((text, ctx) => {
-  const [, amount, unit] = /^(\d+)(ms|s|m|h|d)$/.exec(text) ?? []
-  const factor = unit === undefined ? undefined : DURATION_UNITS[unit]
-  if (amount === undefined || factor === undefined) {
-    ctx.addIssue({ code: "custom", message: "时长要写成整数加单位，如 30d、24h、30s、500ms" })
+  const value = ms(text as StringValue)
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    ctx.addIssue({ code: "custom", message: "时长要写成数字加单位，如 30d、24h、30s、500ms" })
     return z.NEVER
   }
-  return Number(amount) * factor
+  return value
 })
 
 const envSchema = z.object({
@@ -55,6 +52,8 @@ const envSchema = z.object({
    * 一旦被转发出去，有效期内谁都能打开，所以别设太长。过期表现为图片裂开，重进详情页就会拿到新签的地址。
    */
   ATTACHMENT_TTL: duration.prefault("24h"),
+  /** 日志级别，低于它的不输出。debug 会记下每一个发往 e 站的请求，排查时再打开。 */
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   /** 前端开发代理与 Dockerfile 的 EXPOSE 都指向 8000 */
   PORT: z.coerce.number().int().min(1).max(65535).default(8000),
 })

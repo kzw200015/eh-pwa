@@ -1,3 +1,4 @@
+import DataLoader from "dataloader"
 import { LRUCache } from "lru-cache"
 
 import * as attachmentUrls from "@server/eh/attachment-urls"
@@ -8,8 +9,8 @@ import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 /*
  * 图集元数据：统一从表站匿名获取，按图集共享缓存。搜索、详情与阅读历史都经这里补全展示信息。
  *
- * 调用方一次交来一批图集（详情是一本的一批）：缓存里有的直接用，缺的按上游的单次上限（25 本）切批，各批同时发出、各自成败。
- * 缓存里存的是 Promise，还在加载的也在里面：同一本正在加载时后到的请求拿到同一份，不再加载第二次；加载失败的从缓存里移除。
+ * 调用方一次交来一批图集（详情是一本的一批）：缓存里有的直接用，缺的由 DataLoader 按上游的单次上限（25 本）切批，
+ * 各批同时发出、各自成败。还在加载的也在缓存里：同一本正在加载时后到的请求拿到同一份，不再加载第二次；加载失败的从缓存里移除。
  *
  * 元数据是上游原文，缩略图在组装卡片时才签名，标签也在这时才套上译名：签名的有效期不受缓存时长影响，
  * 同步过的译名也当场生效。
@@ -67,37 +68,24 @@ function card(metadata: ehClient.GalleryMetadata, translate: tagTranslationServi
   }
 }
 
-const cache = new LRUCache<string, Promise<ehClient.GalleryMetadata | undefined>>({ max: 500, ttl: 10 * 60_000 })
+/*
+ * 缓存里存的是 Promise。同一轮事件循环里几个请求各自要的也会合进同一批；整批失败时 DataLoader 把这批的 key 移出缓存，
+ * 单本取不到（undefined）照常缓存。
+ */
+const loader = new DataLoader<GalleryRef, ehClient.GalleryMetadata | undefined, string>(
+  async (refs) => {
+    const found = await ehClient.fetchMetadata([...refs])
+    return refs.map((ref) => found.get(refKey(ref)))
+  },
+  {
+    maxBatchSize: ehClient.METADATA_BATCH_SIZE,
+    cacheKeyFn: refKey,
+    cacheMap: new LRUCache<string, Promise<ehClient.GalleryMetadata | undefined>>({ max: 500, ttl: 10 * 60_000 }),
+  },
+)
 
 /** 一批图集的元数据，与 refs 一一对应；上游没有的那本（被删、转私有）是 undefined，所在的那批请求失败则抛出 */
 function loadAll(refs: GalleryRef[]): Promise<(ehClient.GalleryMetadata | undefined)[]> {
-  const loading = new Map<string, Promise<ehClient.GalleryMetadata | undefined>>()
-  const missing = new Map<string, GalleryRef>()
-  for (const ref of refs) {
-    const key = refKey(ref)
-    const cached = cache.get(key)
-    if (cached) {
-      loading.set(key, cached)
-    } else {
-      missing.set(key, ref)
-    }
-  }
-  const toRequest = [...missing.values()]
-  for (let start = 0; start < toRequest.length; start += ehClient.METADATA_BATCH_SIZE) {
-    const batch = toRequest.slice(start, start + ehClient.METADATA_BATCH_SIZE)
-    const request = ehClient.fetchMetadata(batch)
-    for (const ref of batch) {
-      const key = refKey(ref)
-      const metadata = request.then((found) => found.get(key))
-      loading.set(key, metadata)
-      cache.set(key, metadata)
-      /* 加载失败不进缓存；移除前确认缓存里还是这一份，不误删之后重新加载的 */
-      metadata.catch(() => {
-        if (cache.peek(key) === metadata) {
-          cache.delete(key)
-        }
-      })
-    }
-  }
-  return Promise.all(refs.map((ref) => loading.get(refKey(ref))))
+  /* 不用 loadMany：它把失败作为 Error 混进结果里，而这里要整批失败就抛出 */
+  return Promise.all(refs.map((ref) => loader.load(ref)))
 }

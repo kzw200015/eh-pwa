@@ -7,11 +7,11 @@ import * as tokens from "@server/auth/tokens"
 import { env } from "@server/config"
 import { database } from "@server/database/connection"
 import { badRequest } from "@server/http-error"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 
 /* 本站账号：注册、登录与「我是谁」。 */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /** 当前登录的本站账号 */
 interface CurrentUser {
@@ -73,7 +73,7 @@ export async function register({ username, password }: Credentials): Promise<Aut
   if (!user) {
     throw new Error("插入账号后没有拿到新建的那一行")
   }
-  logger.log(`已注册新用户 userId=${user.id} username=${user.username}`)
+  logger.info(`已注册新用户 userId=${user.id} username=${user.username}`)
   return authenticated(user)
 }
 

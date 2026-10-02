@@ -1,5 +1,5 @@
 import { badGateway, badRequest, HttpError, notFound, tooManyRequests } from "@server/http-error"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 import { failureReason } from "@server/outbound-fetch"
 
 /*
@@ -13,7 +13,7 @@ import { failureReason } from "@server/outbound-fetch"
  * 记在这里而不是抛出的地方，是为了哪条路径都漏不掉。
  */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 function log(message: string, detail: unknown) {
   logger.warn(detail === undefined ? message : `${message} ${failureReason(detail)}`)

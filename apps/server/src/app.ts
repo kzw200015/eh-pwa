@@ -1,15 +1,15 @@
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
+import { logger as requestLogger } from "hono/logger"
 
 import { authRoutes } from "@server/auth/auth-routes"
 import { ehRoutes } from "@server/eh/eh-routes"
 import { healthRoutes } from "@server/health/health-routes"
 import { badRequest, HttpError, notFound } from "@server/http-error"
-import { Logger } from "@server/logger"
-import { requestLog } from "@server/request-log"
+import { createLogger } from "@server/logger"
 import { staticFiles } from "@server/static-files"
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /**
  * 整个应用：接口一律挂在 /api 下，各领域的路由只写领域内的路径；其余路径是前端的静态文件。
@@ -17,7 +17,14 @@ const logger = new Logger(import.meta.url)
  * 路由要一路链式写下来：拆成几条语句的话，App 类型里就没有后面挂上的那些接口了。
  */
 export const app = new Hono()
-  .use("/api/*", requestLog)
+  /*
+   * Hono 自带的请求日志，只挂在 /api 下，前端静态文件不记。转进 pino，并去掉查询串：图片地址的查询串里是签名。
+   * 图片接口是边读边转发的，耗时只算到开始发图。
+   */
+  .use(
+    "/api/*",
+    requestLogger((line) => logger.info(line.replace(/\?\S*/, ""))),
+  )
   .route("/api", new Hono().route("/auth", authRoutes).route("/eh", ehRoutes).route("/health", healthRoutes))
   .route("/", staticFiles)
   /*
@@ -32,7 +39,7 @@ export const app = new Hono()
       /* Hono 自己抛的 400 只有请求体解析不了这一种：本站的请求体只收 JSON */
       failure = badRequest("请求体不是合法的 JSON")
     } else {
-      logger.error("未预料的异常", error)
+      logger.error(error, "未预料的异常")
       failure = new HttpError(500, "服务器出错了")
     }
     return c.json(failure.body, failure.status)

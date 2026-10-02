@@ -1,3 +1,4 @@
+import { hkdfSync } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { register, SECRET_KEY, startApp, type TestApp } from "./support/app"
@@ -104,13 +105,13 @@ describe("注册与登录", () => {
 })
 
 describe("登录令牌", () => {
-  function sign(payload: object, key: Buffer, header: object = { alg: "HS256", typ: "JWT" }) {
+  function sign(payload: object, key: string, header: object = { alg: "HS256", typ: "JWT" }) {
     const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url")
     const unsigned = `${encode(header)}.${encode(payload)}`
     return `${unsigned}.${new Bun.CryptoHasher("sha256", key).update(unsigned).digest("base64url")}`
   }
-  /* 令牌子密钥的派生方式：SHA-256(主密钥 + ":token-v1") */
-  const tokenKey = (secret: string) => new Bun.CryptoHasher("sha256").update(`${secret}:token-v1`).digest()
+  /* 令牌子密钥的派生方式：HKDF-SHA256，盐为空，info 是 token-v2，写成十六进制串 */
+  const tokenKey = (secret: string) => Buffer.from(hkdfSync("sha256", secret, "", "token-v2", 32)).toString("hex")
 
   async function me(authorization: string | undefined) {
     const request = t.http.get("/api/auth/me")

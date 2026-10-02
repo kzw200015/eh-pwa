@@ -5,7 +5,7 @@ import { database } from "@server/database/connection"
 import { ehTagTranslations, ehTagTranslationSyncs } from "@server/eh/eh-tables"
 import * as tagTranslationSource from "@server/eh/tag-translation-source"
 import type { TagRef } from "@server/eh/upstream/eh-client"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 
 /* 命名空间本身的译名，上游归在这个命名空间下，raw 是命名空间名 */
 const NAMESPACE_NAMES = "rows"
@@ -59,7 +59,7 @@ const createCache = () => new LRUCache<string, string>({ max: 50_000 })
  * 同步之后整个换一份新缓存；查询途中撞上同步的，结果写进它开始时的那份旧缓存，随它一起丢掉，不会把旧译名留到新缓存里。
  */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 let cache = createCache()
 
@@ -124,7 +124,7 @@ async function replace(): Promise<TagTranslationStatus> {
   /* 上游没变就不重写四万多行，只记下这次同步 */
   if (lastSync?.sha === sha) {
     await database.insert(ehTagTranslationSyncs).values({ sha, count: entries.length })
-    logger.log(`标签译名没有变化 sha=${sha}`)
+    logger.info(`标签译名没有变化 sha=${sha}`)
     return status()
   }
   /* 删和插在一个事务里：中途出错即回滚，不会留下「旧的没了、新的只进来一半」的表 */
@@ -137,7 +137,7 @@ async function replace(): Promise<TagTranslationStatus> {
     await tx.insert(ehTagTranslationSyncs).values({ sha, count: entries.length })
   })
   cache = createCache()
-  logger.log(`已同步标签译名 sha=${sha} count=${entries.length}`)
+  logger.info(`已同步标签译名 sha=${sha} count=${entries.length}`)
   return status()
 }
 
