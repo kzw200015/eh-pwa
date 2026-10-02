@@ -16,15 +16,6 @@ const TOKEN_KEY = "eh_pwa_token"
  */
 let token = readStoredToken()
 
-function readStoredToken(): string {
-  try {
-    return localStorage.getItem(TOKEN_KEY) ?? ""
-  } catch {
-    /* 隐私模式等场景下 localStorage 可能直接抛错，此时按未登录处理 */
-    return ""
-  }
-}
-
 /** 登录成功后存下令牌，传空串即为退出登录 */
 export function setToken(next: string) {
   token = next
@@ -86,6 +77,24 @@ export async function request<T extends ClientResponse<unknown>>(pending: Promis
   }
 }
 
+/**
+ * 带时限的 request：到点就中止，这一次算没存上（报「请求超时」）。send 要把给它的 signal 交给这次调用，
+ * 如 `requestWithin(ms, (signal) => api.eh.history.$delete(undefined, { init: { signal } }))`。
+ * 不用 AbortSignal.timeout：它的计时器不经页面的 setTimeout，测试里的假时钟推不动它。
+ */
+export async function requestWithin<T extends ClientResponse<unknown>>(
+  ms: number,
+  send: (signal: AbortSignal) => Promise<T>,
+) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new DOMException("请求超时", "TimeoutError")), ms)
+  try {
+    return await request(send(controller.signal))
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /* 请求没发出去或中途断了。取消原样交回；超时与断网换成能直接显示的说明 */
 function offline(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -108,20 +117,11 @@ function describeFailure(status: unknown, body: unknown) {
   return `服务器返回了 HTTP ${String(status)}`
 }
 
-/**
- * 带时限的 request：到点就中止，这一次算没存上（报「请求超时」）。send 要把给它的 signal 交给这次调用，
- * 如 `requestWithin(ms, (signal) => api.eh.history.$delete(undefined, { init: { signal } }))`。
- * 不用 AbortSignal.timeout：它的计时器不经页面的 setTimeout，测试里的假时钟推不动它。
- */
-export async function requestWithin<T extends ClientResponse<unknown>>(
-  ms: number,
-  send: (signal: AbortSignal) => Promise<T>,
-) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new DOMException("请求超时", "TimeoutError")), ms)
+function readStoredToken(): string {
   try {
-    return await request(send(controller.signal))
-  } finally {
-    clearTimeout(timer)
+    return localStorage.getItem(TOKEN_KEY) ?? ""
+  } catch {
+    /* 隐私模式等场景下 localStorage 可能直接抛错，此时按未登录处理 */
+    return ""
   }
 }

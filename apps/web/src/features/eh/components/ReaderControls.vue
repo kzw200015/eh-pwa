@@ -16,6 +16,13 @@ import { computed } from "vue"
 import { Button } from "@/components/ui/button"
 import type { ReaderSession } from "@/features/eh/composables/useReaderSession"
 
+/* 阅读器底色固定是黑的：按钮文字和悬停色按黑底改成白色系。 */
+const chromeButton = {
+  class: "text-white hover:bg-white/10 hover:text-white",
+  size: "icon-sm",
+  variant: "ghost",
+} as const
+
 /* 翻页、按住进度条、自动翻页都直接交给这次阅读（见 useReaderSession）；退出与全屏归阅读器页面管，照常发事件。 */
 const props = defineProps<{
   session: Pick<
@@ -41,13 +48,6 @@ function startSeeking(event: PointerEvent) {
   const input = event.currentTarget as HTMLInputElement
   input.setPointerCapture(event.pointerId)
 }
-
-/* 阅读器底色固定是黑的：按钮文字和悬停色按黑底改成白色系。 */
-const chromeButton = {
-  class: "text-white hover:bg-white/10 hover:text-white",
-  size: "icon-sm",
-  variant: "ghost",
-} as const
 </script>
 
 <template>

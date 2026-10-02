@@ -21,6 +21,26 @@ export type GalleryPreferences = Awaited<ReturnType<typeof fetchGalleryPreferenc
 /** 阅读历史的一页 */
 export type ReadingHistoryPage = Awaited<ReturnType<typeof fetchReadingHistory>>
 
+/*
+ * 保存的时限。保存只是落库，正常百毫秒内就回来；十秒还没回来多半是连接半开（移动网络切换时常见），
+ * 再等下去后面排队的保存、等着写入落地才读的数据全都跟着卡住。超时即中止，这一次算没存上。
+ * 读取不设这个时限：换页面时由调用方取消，搜索这类要抓上游页面的读取本来就可能很慢。
+ *
+ * 带这个时限的写接口一律不接 AbortSignal：已经发出的保存不该因为离开页面被取消，只有挂住太久的才中止。
+ * 它们都只回成败：本地已经按同一条规则改好了。
+ */
+const SAVE_TIMEOUT = 10_000
+
+/*
+ * 进度上报的上报方与序号。上报不排队，同一本的两次可能乱序到达，服务端按序号只认同一上报方更新的那次，
+ * 迟到的旧页码不会把进度按回去。上报方就是这次页面加载，刷新即换一个。
+ * 不用 crypto.randomUUID：它只在 HTTPS 和 localhost 下可用。
+ */
+const progressWriter = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+  byte.toString(16).padStart(2, "0"),
+).join("")
+let progressSeq = 0
+
 /**
  * 搜索图集。cursor 为空表示第一页，翻页时关键词和分类要一起带上。
  *
@@ -66,40 +86,33 @@ export function fetchGalleryPreviews(gid: number, token: string, slice: number, 
   )
 }
 
-export function fetchCredentialStatus(signal?: AbortSignal) {
-  return request(api.eh.credential.$get(undefined, { init: { signal } }))
+/** 这个账号在这本图集上读到第几页。 */
+export function fetchReadingProgress(gid: number, signal?: AbortSignal) {
+  return request(api.eh.progress[":gid"].$get({ param: { gid: String(gid) } }, { init: { signal } }))
 }
 
-/** 绑定 e 站 Cookie。后端会先拿它实际请求一次，无效就不入库 */
-export function bindCredential(cookie: InferRequestType<typeof api.eh.credential.$post>["json"]) {
-  return request(api.eh.credential.$post({ json: cookie }))
+/** 上报读到第几页。带 keepalive：刷新、关标签页时发出的那次，页面卸载之后浏览器照样把它送完。 */
+export function saveProgress(gid: number, token: string, page: number) {
+  progressSeq += 1
+  const report = { gid, token, page, writer: progressWriter, seq: progressSeq }
+  return requestWithin(SAVE_TIMEOUT, (signal) =>
+    api.eh.progress.$post({ json: report }, { init: { signal, keepalive: true } }),
+  )
 }
 
-/** 解绑，返回解绑后的状态 */
-export function unbindCredential() {
-  return request(api.eh.credential.$delete())
+export function fetchReadingHistory(cursor: string, signal?: AbortSignal) {
+  return request(api.eh.history.$get({ query: { cursor } }, { init: { signal } }))
 }
 
-export function fetchTagTranslationStatus(signal?: AbortSignal) {
-  return request(api.eh["tag-translations"].$get(undefined, { init: { signal } }))
+export function removeReadingHistory(gid: number) {
+  return requestWithin(SAVE_TIMEOUT, (signal) =>
+    api.eh.history[":gid"].$delete({ param: { gid: String(gid) } }, { init: { signal } }),
+  )
 }
 
-/** 从上游拉一版标签译名替换掉库里的，回同步后的状态。拉取与写入都完成才回，可能要十几秒，所以不设保存的时限 */
-export function syncTagTranslations() {
-  return request(api.eh["tag-translations"].sync.$post())
+export function clearReadingHistory() {
+  return requestWithin(SAVE_TIMEOUT, (signal) => api.eh.history.$delete(undefined, { init: { signal } }))
 }
-
-/*
- * 以下写接口一律不接 AbortSignal：已经发出的保存不该因为离开页面被取消，只有挂住太久的才中止（见 SAVE_TIMEOUT）。
- * 都只回成败：本地已经按同一条规则改好了。
- */
-
-/*
- * 保存的时限。保存只是落库，正常百毫秒内就回来；十秒还没回来多半是连接半开（移动网络切换时常见），
- * 再等下去后面排队的保存、等着写入落地才读的数据全都跟着卡住。超时即中止，这一次算没存上。
- * 读取不设这个时限：换页面时由调用方取消，搜索这类要抓上游页面的读取本来就可能很慢。
- */
-const SAVE_TIMEOUT = 10_000
 
 export function fetchGalleryPreferences(signal?: AbortSignal) {
   return request(api.eh.preferences.$get(undefined, { init: { signal } }))
@@ -132,40 +145,25 @@ export function clearSearchHistory() {
   return requestWithin(SAVE_TIMEOUT, (signal) => api.eh["search-history"].$delete(undefined, { init: { signal } }))
 }
 
-/** 这个账号在这本图集上读到第几页。 */
-export function fetchReadingProgress(gid: number, signal?: AbortSignal) {
-  return request(api.eh.progress[":gid"].$get({ param: { gid: String(gid) } }, { init: { signal } }))
+export function fetchCredentialStatus(signal?: AbortSignal) {
+  return request(api.eh.credential.$get(undefined, { init: { signal } }))
 }
 
-export function fetchReadingHistory(cursor: string, signal?: AbortSignal) {
-  return request(api.eh.history.$get({ query: { cursor } }, { init: { signal } }))
+/** 绑定 e 站 Cookie。后端会先拿它实际请求一次，无效就不入库 */
+export function bindCredential(cookie: InferRequestType<typeof api.eh.credential.$post>["json"]) {
+  return request(api.eh.credential.$post({ json: cookie }))
 }
 
-export function removeReadingHistory(gid: number) {
-  return requestWithin(SAVE_TIMEOUT, (signal) =>
-    api.eh.history[":gid"].$delete({ param: { gid: String(gid) } }, { init: { signal } }),
-  )
+/** 解绑，返回解绑后的状态 */
+export function unbindCredential() {
+  return request(api.eh.credential.$delete())
 }
 
-export function clearReadingHistory() {
-  return requestWithin(SAVE_TIMEOUT, (signal) => api.eh.history.$delete(undefined, { init: { signal } }))
+export function fetchTagTranslationStatus(signal?: AbortSignal) {
+  return request(api.eh["tag-translations"].$get(undefined, { init: { signal } }))
 }
 
-/*
- * 进度上报的上报方与序号。上报不排队，同一本的两次可能乱序到达，服务端按序号只认同一上报方更新的那次，
- * 迟到的旧页码不会把进度按回去。上报方就是这次页面加载，刷新即换一个。
- * 不用 crypto.randomUUID：它只在 HTTPS 和 localhost 下可用。
- */
-const progressWriter = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-  byte.toString(16).padStart(2, "0"),
-).join("")
-let progressSeq = 0
-
-/** 上报读到第几页。带 keepalive：刷新、关标签页时发出的那次，页面卸载之后浏览器照样把它送完。 */
-export function saveProgress(gid: number, token: string, page: number) {
-  progressSeq += 1
-  const report = { gid, token, page, writer: progressWriter, seq: progressSeq }
-  return requestWithin(SAVE_TIMEOUT, (signal) =>
-    api.eh.progress.$post({ json: report }, { init: { signal, keepalive: true } }),
-  )
+/** 从上游拉一版标签译名替换掉库里的，回同步后的状态。拉取与写入都完成才回，可能要十几秒，所以不设保存的时限 */
+export function syncTagTranslations() {
+  return request(api.eh["tag-translations"].sync.$post())
 }

@@ -15,19 +15,9 @@ import { failureReason } from "@server/outbound-fetch"
 
 const logger = createLogger(import.meta.url)
 
-function log(message: string, detail: unknown) {
-  logger.warn(detail === undefined ? message : `${message} ${failureReason(detail)}`)
-}
-
 /** 上游返回了意料之外的东西，通常是版面改了。message 给用户看，detail 只进日志。 */
 export function unavailable(message: string, detail?: unknown) {
   log(message, detail)
-  return badGateway(message, { cause: detail })
-}
-
-/** 与某个上游地址有关的失败：日志里带上地址，排查时才知道是哪台主机、哪个页面。 */
-function unavailableAt(message: string, url: string, detail: unknown) {
-  log(message, `url=${url} ${failureReason(detail)}`)
   return badGateway(message, { cause: detail })
 }
 
@@ -75,4 +65,14 @@ export function imageNodeFailure(url: string, detail: unknown) {
   const message = "图床节点取不到这张图"
   log(message, `url=${url} ${failureReason(detail)}`)
   return new ImageNodeFailure(message, { cause: detail })
+}
+
+/** 与某个上游地址有关的失败：日志里带上地址，排查时才知道是哪台主机、哪个页面。 */
+function unavailableAt(message: string, url: string, detail: unknown) {
+  log(message, `url=${url} ${failureReason(detail)}`)
+  return badGateway(message, { cause: detail })
+}
+
+function log(message: string, detail: unknown) {
+  logger.warn(detail === undefined ? message : `${message} ${failureReason(detail)}`)
 }

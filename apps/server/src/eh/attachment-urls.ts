@@ -6,12 +6,6 @@ import { forbidden } from "@server/http-error"
 import { isDecimal } from "@server/numeric"
 import { attachmentKey } from "@server/signing"
 
-/** 地址上固定的两个签名参数：e 是过期时间（毫秒），s 是签名值。 */
-export interface Signature {
-  e: string
-  s: string
-}
-
 /*
  * 两类图片地址的签发与校验，写在同一处：两边哪天拼法不一致，表现就是所有图片突然打不开。
  *
@@ -20,6 +14,12 @@ export interface Signature {
  * 地址本身会出现在浏览器历史和转发日志里，签得再长也挡不住转发泄露，所以有效期才是重点。
  * 改了签名的算法或地址的形状，已发出去、还没过期的地址就一齐作废（最多三十来个小时），浏览器缓存的图也得重新取一遍。
  */
+
+/** 地址上固定的两个签名参数：e 是过期时间（毫秒），s 是签名值。 */
+export interface Signature {
+  e: string
+  s: string
+}
 
 /** 缩略图：签的是上游原始地址，校验通过才代理，客户端指定不了主机。 */
 export function thumbnail(raw: string): string {

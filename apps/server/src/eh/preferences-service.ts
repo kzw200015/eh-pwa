@@ -13,6 +13,7 @@ import { ehPreferences } from "@server/eh/eh-tables"
  * 浏览偏好与搜索历史，存在同一行。写入都与到达顺序无关（见 ADR-0006）：偏好只改带来的字段，
  * 搜索历史一次记或删一个词，在行锁下按共享包的同一条规则算出新列表。
  */
+
 /** 浏览偏好：读接口的响应体。改偏好时每个字段都可省，只改带来的 */
 interface GalleryPreferences {
   categories: GalleryCategory[]

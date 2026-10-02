@@ -4,16 +4,6 @@ import { utf8Length } from "./text"
 
 /* 前后端都要执行的规则：前端据此列选项、提交前预校验、当场改本地那份，后端据此校验入参、落库。请求的形状不在这里，见后端的路由。 */
 
-/** 搜索词的字节上限。搜索历史存的就是搜过的词，两处共用这一份：各写各的，能搜的词就可能存不进历史。 */
-export const KEYWORD_MAX_BYTES = 200
-
-/* 搜索历史最多留几条。 */
-const SEARCH_HISTORY_LIMIT = 10
-
-/** 自动翻页间隔的取值范围，单位秒。 */
-export const READER_INTERVAL_MIN = 1
-export const READER_INTERVAL_MAX = 20
-
 /**
  * 图集分类，也是搜索与偏好里认的名字。e 站的分类就这十个，服务端据此换算筛选参数，前端据此列筛选项。
  */
@@ -37,6 +27,10 @@ export const GALLERY_MIN_RATINGS = [2, 3, 4, 5] as const
 
 export type GalleryMinRating = (typeof GALLERY_MIN_RATINGS)[number]
 
+/** 自动翻页间隔的取值范围，单位秒。 */
+export const READER_INTERVAL_MIN = 1
+export const READER_INTERVAL_MAX = 20
+
 const READER_INTERVAL_RULE = `自动翻页间隔应为 ${READER_INTERVAL_MIN}–${READER_INTERVAL_MAX} 秒`
 
 /** 自动翻页间隔：前端调间隔前先过一遍，服务端存偏好时校验的也是它。 */
@@ -55,6 +49,12 @@ export const DEFAULT_GALLERY_PREFERENCES: {
   minRating: null,
   readerInterval: 5,
 }
+
+/** 搜索词的字节上限。搜索历史存的就是搜过的词，两处共用这一份：各写各的，能搜的词就可能存不进历史。 */
+export const KEYWORD_MAX_BYTES = 200
+
+/* 搜索历史最多留几条。 */
+const SEARCH_HISTORY_LIMIT = 10
 
 const SEARCH_HISTORY_ENTRY_RULE = `搜索历史关键词应为 1–${KEYWORD_MAX_BYTES} 字节`
 
