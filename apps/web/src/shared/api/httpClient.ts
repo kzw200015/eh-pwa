@@ -16,15 +16,6 @@ const TOKEN_KEY = "eh_pwa_token"
  */
 let token = readStoredToken()
 
-function readStoredToken(): string {
-  try {
-    return localStorage.getItem(TOKEN_KEY) ?? ""
-  } catch {
-    /* 隐私模式等场景下 localStorage 可能直接抛错，此时按未登录处理 */
-    return ""
-  }
-}
-
 /** 登录成功后存下令牌，传空串即为退出登录 */
 export function setToken(next: string) {
   token = next
@@ -86,28 +77,6 @@ export async function request<T extends ClientResponse<unknown>>(pending: Promis
   }
 }
 
-/* 请求没发出去或中途断了。取消原样交回；超时与断网换成能直接显示的说明 */
-function offline(error: unknown) {
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return error
-  }
-  const timedOut = error instanceof DOMException && error.name === "TimeoutError"
-  return new Error(timedOut ? "请求超时" : "网络连接失败", { cause: error })
-}
-
-/*
- * 失败时给界面看的那句话。有本站响应体就用它的 message（一组文案时连成一句）；
- * 没有的（反向代理返回的空体或 HTML）只说状态码。
- */
-function describeFailure(status: unknown, body: unknown) {
-  const message = typeof body === "object" && body !== null && "message" in body ? body.message : undefined
-  const joined = Array.isArray(message) ? message.join("；") : message
-  if (typeof joined === "string" && joined) {
-    return joined
-  }
-  return `服务器返回了 HTTP ${String(status)}`
-}
-
 /**
  * 带时限的 request：到点就中止，这一次算没存上（报「请求超时」）。send 要把给它的 signal 交给这次调用，
  * 如 `requestWithin(ms, (signal) => api.eh.history.$delete(undefined, { init: { signal } }))`。
@@ -123,5 +92,32 @@ export async function requestWithin<T extends ClientResponse<unknown>>(
     return await request(send(controller.signal))
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/* 请求没发出去或中途断了。取消原样交回；超时与断网换成能直接显示的说明 */
+function offline(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return error
+  }
+  const timedOut = error instanceof DOMException && error.name === "TimeoutError"
+  return new Error(timedOut ? "请求超时" : "网络连接失败", { cause: error })
+}
+
+/*
+ * 失败时给界面看的那句话。有本站响应体就用它的 message；
+ * 没有的（反向代理返回的空体或 HTML）只说状态码。
+ */
+function describeFailure(status: unknown, body: unknown) {
+  const message = typeof body === "object" && body !== null && "message" in body ? body.message : undefined
+  return typeof message === "string" && message ? message : `服务器返回了 HTTP ${String(status)}`
+}
+
+function readStoredToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? ""
+  } catch {
+    /* 隐私模式等场景下 localStorage 可能直接抛错，此时按未登录处理 */
+    return ""
   }
 }

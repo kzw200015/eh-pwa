@@ -1,11 +1,19 @@
 import { z } from "zod"
 
 import { badGateway } from "@server/http-error"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
 import { failureReason } from "@server/outbound-fetch"
 
 /* 标签译名的数据源：GitHub 上 EhTagTranslation 社区维护的数据库，整库一个 JSON 文件。 */
+
+const logger = createLogger(import.meta.url)
+
+/** 译名表的一版：上游的提交 sha，外加每一条译名。 */
+interface TagTranslationRelease {
+  sha: string
+  entries: { namespace: string; raw: string; name: string }[]
+}
 
 /*
  * 取 release 分支上的镜像而不是 Release 资产：releases/latest/download 要经两次重定向，出网不跟随；
@@ -23,20 +31,6 @@ const payloadSchema = z.object({
     }),
   ),
 })
-
-/** 译名表的一版：上游的提交 sha，外加每一条译名。 */
-interface TagTranslationRelease {
-  sha: string
-  entries: { namespace: string; raw: string; name: string }[]
-}
-
-const logger = new Logger(import.meta.url)
-
-/** 拉不到或拉到的不对：原因只进日志，前端只看到一句中文。 */
-function unavailable(message: string, detail: unknown) {
-  logger.warn(`${message} ${failureReason(detail)}`)
-  return badGateway(message, { cause: detail })
-}
 
 /** 拉取整库并校验格式，免得脏数据入库。一条译名都没有也算拉坏了：整表替换会把已有的译名清空。 */
 export async function fetchRelease(): Promise<TagTranslationRelease> {
@@ -63,4 +57,10 @@ export async function fetchRelease(): Promise<TagTranslationRelease> {
     throw unavailable("标签译名数据是空的", `sha=${parsed.data.head.sha}`)
   }
   return { sha: parsed.data.head.sha, entries }
+}
+
+/** 拉不到或拉到的不对：原因只进日志，前端只看到一句中文。 */
+function unavailable(message: string, detail: unknown) {
+  logger.warn(`${message} ${failureReason(detail)}`)
+  return badGateway(message, { cause: detail })
 }

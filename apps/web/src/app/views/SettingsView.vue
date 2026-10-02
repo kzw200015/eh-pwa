@@ -21,13 +21,18 @@ const cookieFields = [
   { name: "ipbPassHash", label: "ipb_pass_hash", hint: "登录 e 站后必有" },
   { name: "igneous", label: "igneous", hint: "里站专用，没有就留空，留空则只能看表站" },
 ] as const
+
 const router = useRouter()
 const authStore = useAuthStore()
 /* 绑定状态、进行中与失败提示都由这一处提供，页面只管显示和提交。 */
 const { status, loading, loadError, saving, errorMessage, reload, bind, unbind: unbindCredential } = useEhCredential()
 const tagTranslationCard = useTemplateRef("tagTranslationCard")
 const form = ref({ ipbMemberId: "", ipbPassHash: "", igneous: "" })
+const successMessage = ref("")
 const refreshing = ref(false)
+
+/* 页面被 KeepAlive 留着（没提交的草稿要留住），每次回来都重读一次状态。 */
+useRefreshOnActivated(reload, () => tagTranslationCard.value?.reload())
 
 /*
  * 重读绑定状态与译名状态：别处（另一台设备）换绑了 e 站账号、同步了译名，要靠这里拿到最新状态。
@@ -41,10 +46,6 @@ async function refresh() {
     refreshing.value = false
   }
 }
-
-/* 页面被 KeepAlive 留着（没提交的草稿要留住），每次回来都重读一次状态。 */
-useRefreshOnActivated(reload, () => tagTranslationCard.value?.reload())
-const successMessage = ref("")
 
 /* 直接用这次提交回来的状态，不去读共享的那份，省得依赖「那边已经写完了」这个顺序。 */
 async function submit() {

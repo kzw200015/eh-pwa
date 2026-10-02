@@ -7,7 +7,7 @@ import * as galleryCatalog from "@server/eh/gallery-catalog"
 import { encodeHistoryCursor, type HistoryCursor } from "@server/eh/history-cursor"
 import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 
-const PAGE_SIZE = 25
+/* 阅读进度与阅读历史：它们是同一张表，删一条阅读历史，对应的阅读进度也就没了。 */
 
 /** 这个账号在某本图集上读到第几页 */
 interface ReadingProgress {
@@ -32,9 +32,9 @@ interface ProgressReport extends GalleryRef {
   seq: number
 }
 
-/*
- * 阅读进度与阅读历史：它们是同一张表，删一条阅读历史，对应的阅读进度也就没了。
- */
+/* 阅读历史一页几条 */
+const PAGE_SIZE = 25
+
 /**
  * 记下读到第几页。同一个图集只留一条，重复上报就覆盖；同一上报方的序号不比库里的新，就是迟到的旧上报，不写。
  * 冲突的那行会先被锁住，条件按它的最新版本判断，两次上报同时到也不会让旧的写进去。

@@ -1,9 +1,10 @@
+import { hkdfSync } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { register, SECRET_KEY, startApp, type TestApp } from "./support/app"
 import { createDatabase, sql } from "./support/database"
 
-/* Kotlin 版（沿用自更早的 Go 版）生成的真实哈希，旧账号的密码必须照样验得过 */
+/* 库里已有账号的真实哈希，这些账号的密码必须照样验得过 */
 const LEGACY_HASH = "$argon2id$v=19$m=65536,t=2,p=1$GWJ0cHAGWKo9G+ZbnLQTDA$DoZHSlziwVSiiOUfmY5r/+Vzuq4jc9hK6gaeBrbid8c"
 const LEGACY_PASSWORD = "correct horse 电池"
 
@@ -36,7 +37,7 @@ describe("注册与登录", () => {
       .post("/api/auth/register")
       .send({ username: "Case-User", password: "另一个足够长的密码" })
     expect(taken.status).toBe(400)
-    expect(taken.body).toEqual({ statusCode: 400, message: "用户名已被占用", error: "Bad Request" })
+    expect(taken.body).toEqual({ code: 400, message: "用户名已被占用" })
     await register(t.http, "case-user")
 
     const wrongCase = await t.http.post("/api/auth/login").send({ username: "CASE-USER", password: "这个密码足够长了" })
@@ -58,17 +59,17 @@ describe("注册与登录", () => {
   it("入参不合格时回中文文案，不带字段路径", async () => {
     const response = await t.http.post("/api/auth/register").send({ username: "ab", password: "短" })
     expect(response.status).toBe(400)
-    expect(response.body.message).toEqual(["用户名只能是 3 到 32 位的字母、数字、下划线或连字符", "密码至少 8 位"])
+    expect(response.body.message).toEqual("用户名只能是 3 到 32 位的字母、数字、下划线或连字符；密码至少 8 位")
     const login = await t.http.post("/api/auth/login").send({ username: "ab" })
-    expect([login.status, login.body.message]).toEqual([400, ["请填写用户名和密码"]])
+    expect([login.status, login.body.message]).toEqual([400, "请填写用户名和密码"])
   })
 
   it("密码长度按码点数：3 个汉字不够 8 位，8 个表情符号够", async () => {
-    const cases: [string, string, string[] | undefined][] = [
+    const cases: [string, string, string | undefined][] = [
       ["emoji-8", "😀".repeat(8), undefined],
       ["emoji-128", "😀".repeat(128), undefined],
-      ["hanzi-7", "密码密码密码密", ["密码至少 8 位"]],
-      ["ascii-129", "a".repeat(129), ["密码最长 128 位"]],
+      ["hanzi-7", "密码密码密码密", "密码至少 8 位"],
+      ["ascii-129", "a".repeat(129), "密码最长 128 位"],
     ]
     for (const [username, password, message] of cases) {
       const response = await t.http.post("/api/auth/register").send({ username, password })
@@ -104,13 +105,13 @@ describe("注册与登录", () => {
 })
 
 describe("登录令牌", () => {
-  function sign(payload: object, key: Buffer, header: object = { alg: "HS256", typ: "JWT" }) {
+  function sign(payload: object, key: string, header: object = { alg: "HS256", typ: "JWT" }) {
     const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url")
     const unsigned = `${encode(header)}.${encode(payload)}`
     return `${unsigned}.${new Bun.CryptoHasher("sha256", key).update(unsigned).digest("base64url")}`
   }
-  /* 令牌子密钥的派生方式：SHA-256(主密钥 + ":token-v1") */
-  const tokenKey = (secret: string) => new Bun.CryptoHasher("sha256").update(`${secret}:token-v1`).digest()
+  /* 令牌子密钥的派生方式：HKDF-SHA256，盐为空，info 是 token-v2，写成十六进制串 */
+  const tokenKey = (secret: string) => Buffer.from(hkdfSync("sha256", secret, "", "token-v2", 32)).toString("hex")
 
   async function me(authorization: string | undefined) {
     const request = t.http.get("/api/auth/me")
@@ -156,7 +157,7 @@ describe("登录令牌", () => {
       expect(await me(`Bearer ${token}`)).toBeNull()
       const response = await t.http.get("/api/eh/credential").set("Authorization", `Bearer ${token}`)
       expect(response.status).toBe(401)
-      expect(response.body).toEqual({ statusCode: 401, message: "请先登录", error: "Unauthorized" })
+      expect(response.body).toEqual({ code: 401, message: "请先登录" })
     } finally {
       vi.useRealTimers()
     }

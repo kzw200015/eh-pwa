@@ -18,6 +18,12 @@ import {
 } from "@/components/ui/sidebar"
 import { galleryListName, gallerySource } from "@/features/eh/navigation"
 
+/*
+ * 手机抽屉里的导航项放大到行高 44px、16px 字、20px 图标：shadcn 默认的 32px 是按鼠标设计的，手指点偏小。
+ * 桌面保持官方尺寸。max-md 与 shadcn 判定手机的断点一致（768px），抽屉里也不会出现收起成图标栏的状态。
+ */
+const MENU_BUTTON_CLASS = "max-md:h-11 max-md:text-base max-md:[&_svg]:size-5"
+
 const route = useRoute()
 const items = getNavigationItems(useRouter())
 const { setOpenMobile } = useSidebar()
@@ -26,12 +32,6 @@ watch(
   () => route.fullPath,
   () => closeNavigation(),
 )
-
-/*
- * 手机抽屉里的导航项放大到行高 44px、16px 字、20px 图标：shadcn 默认的 32px 是按鼠标设计的，手指点偏小。
- * 桌面保持官方尺寸。max-md 与 shadcn 判定手机的断点一致（768px），抽屉里也不会出现收起成图标栏的状态。
- */
-const MENU_BUTTON_CLASS = "max-md:h-11 max-md:text-base max-md:[&_svg]:size-5"
 
 function closeNavigation() {
   setOpenMobile(false)

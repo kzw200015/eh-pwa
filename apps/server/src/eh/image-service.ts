@@ -4,7 +4,7 @@ import * as imageLocator from "@server/eh/image-locator"
 import * as ehClient from "@server/eh/upstream/eh-client"
 import { imageBroken, ImageNodeFailure, imageNodeFailure } from "@server/eh/upstream/failures"
 import type { GalleryRef } from "@server/eh/upstream/gallery-ref"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 
 /*
  * 图片代理：签名校验通过才取图，交回可以直接转发的图片流。
@@ -15,7 +15,7 @@ import { Logger } from "@server/logger"
  * 浏览器中途放弃（阅读器里快速翻页时成批发生）时取消上游，别在服务端把整张图白下完。
  */
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /** 校验签名后用签发对象的凭据取图。uid 要等签名校验通过，才能拿它去读凭据。图床节点失败时换源重试一次。 */
 export async function openGalleryImage(
@@ -34,7 +34,7 @@ export async function openGalleryImage(
       throw error
     }
     /* 失败原因在创建 ImageNodeFailure 时已经连同地址记过了，这里记下是哪本哪页、按地址对得上 */
-    logger.log(`图床节点取图失败，换源重试 gid=${ref.gid} page=${page} url=${image.imageUrl}`)
+    logger.info(`图床节点取图失败，换源重试 gid=${ref.gid} page=${page} url=${image.imageUrl}`)
     return started(await ehClient.openImage((await imageLocator.relocate(access, ref, page, image)).imageUrl))
   }
 }

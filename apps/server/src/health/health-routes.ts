@@ -3,9 +3,9 @@ import { Hono } from "hono"
 
 import { database } from "@server/database/connection"
 import { serviceUnavailable } from "@server/http-error"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 
-const logger = new Logger(import.meta.url)
+const logger = createLogger(import.meta.url)
 
 /**
  * 给 Kubernetes 的探针，不要求登录，只看状态码。

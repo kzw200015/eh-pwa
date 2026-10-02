@@ -57,7 +57,7 @@ describe("阅读进度", () => {
         .post("/api/eh/progress")
         .set(auth)
         .send({ ...valid, ...change })
-      expect([response.status, response.body.message]).toEqual([400, [message]])
+      expect([response.status, response.body.message]).toEqual([400, message])
     }
   })
 })

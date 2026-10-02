@@ -1,4 +1,5 @@
 import type { GalleryCategory, GalleryMinRating } from "@eh-pwa/shared/eh"
+import { z } from "zod"
 
 import { ANONYMOUS, cookieHeader, SITES, type EhAccess, type EhCredential } from "@server/eh/upstream/access"
 import { categoryFilter } from "@server/eh/upstream/categories"
@@ -15,8 +16,8 @@ import {
 } from "@server/eh/upstream/failures"
 import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 import { isAllowedImageUrl } from "@server/eh/upstream/image-hosts"
+import { gdataSchema, type GalleryMetadata } from "@server/eh/upstream/metadata"
 import {
-  decodeEntities,
   parseGalleryList,
   parseGallerySlice,
   parseImagePage,
@@ -25,8 +26,15 @@ import {
   type GallerySlice,
   type ImagePage,
 } from "@server/eh/upstream/parse"
-import { Logger } from "@server/logger"
+import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
+
+/*
+ * e 站的只读客户端：上游协议、「200 但不是内容」的识别与失败翻译，以及已校验过的图片流。
+ * 出网只有 outbound 这一个出口。
+ */
+
+const logger = createLogger(import.meta.url)
 
 /** 一次搜索的条件，校验见搜索路由上的 schema。 */
 export interface GallerySearch {
@@ -38,47 +46,6 @@ export interface GallerySearch {
   cursor: string
 }
 
-/** 拆好的标签原文（female:big breasts 拆成 female 与 big breasts），还没套译名。 */
-export interface TagRef {
-  /** e 站给临时标签不带前缀，归到 temp */
-  namespace: string
-  value: string
-}
-
-/** 标准化后的上游元数据：缩略图还是上游原地址、没签成本站的代理地址，标签还没套译名。 */
-export interface GalleryMetadata {
-  gid: number
-  token: string
-  title: string
-  /** 日文原标题，可能为空 */
-  titleJpn: string
-  /** e 站的英文分类名，如 Doujinshi */
-  category: string
-  thumbnailUrl: string
-  uploader: string
-  /** ISO 8601 */
-  postedAt: string
-  fileCount: number
-  rating: number
-  tags: TagRef[]
-  /** 字节数 */
-  fileSize: number
-  torrentCount: number
-  /** 图集是否已被删除 */
-  expunged: boolean
-}
-
-/* e 站给临时标签不带前缀 */
-const TEMP_NAMESPACE = "temp"
-
-/** 标签形如 artist:gentsuki，按第一个冒号拆开；没有冒号的是临时标签。 */
-function toTag(tag: string): TagRef {
-  const index = tag.indexOf(":")
-  return index < 0
-    ? { namespace: TEMP_NAMESPACE, value: tag }
-    : { namespace: tag.slice(0, index), value: tag.slice(index + 1) }
-}
-
 /** 已校验过的图片流，外加转发时要带的响应头。 */
 export interface ImageStream {
   contentType: string
@@ -87,6 +54,13 @@ export interface ImageStream {
   body: ReadableStream<Uint8Array>
   /** 上游地址，只用于日志 */
   source: string
+}
+
+/** 读进内存的上游响应。 */
+interface UpstreamResponse {
+  url: string
+  status: number
+  body: string
 }
 
 /** 元数据接口一次最多查这么多本。由调用方按它切批，各批各自成败，一批失败不连累别的批。 */
@@ -102,20 +76,6 @@ const QUOTA_IMAGES = new Set([
 
 /** 未登录时 home.php 会 302 到论坛登录页，登录成功才是 200：拿它检验一组 Cookie 在表站认不认。 */
 const HOME_URL = `${SITES.e.page}/home.php`
-
-/** 读进内存的上游响应。 */
-interface UpstreamResponse {
-  url: string
-  status: number
-  body: string
-}
-
-/*
- * e 站的只读客户端：上游协议、「200 但不是内容」的识别与失败翻译，以及已校验过的图片流。
- * 出网只有 outbound 这一个出口。
- */
-
-const logger = new Logger(import.meta.url)
 
 export async function search(
   access: EhAccess,
@@ -152,20 +112,16 @@ export async function fetchMetadata(refs: GalleryRef[]): Promise<Map<string, Gal
   if (typeof response.error === "string" && response.error) {
     throw unavailable("e 站元数据接口拒绝了请求", `error=${response.error}`)
   }
-  if (!Array.isArray(response.gmetadata)) {
-    throw unavailable("e 站元数据接口没有返回图集数据")
+  const parsed = gdataSchema.safeParse(response)
+  if (!parsed.success) {
+    throw unavailable("e 站元数据接口返回的图集数据格式不对", z.prettifyError(parsed.error))
   }
   const requested = new Set(refs.map(refKey))
   const batch = new Map<string, GalleryMetadata>()
-  for (const entry of response.gmetadata) {
-    if (!isRecord(entry)) {
-      throw unavailable("e 站元数据接口返回的图集数据格式不对", `entry=${JSON.stringify(entry)}`)
-    }
-    /* 单个图集被删或转私有时，那一条会变成 { gid, error }，跳过它，别让整批作废 */
-    if (entry.error) {
+  for (const metadata of parsed.data.gmetadata) {
+    if (metadata === null) {
       continue
     }
-    const metadata = toMetadata(entry)
     if (!requested.has(refKey(metadata))) {
       throw unavailable("e 站返回的图集定位信息与请求不一致")
     }
@@ -393,42 +349,4 @@ function withinQuota(image: ImagePage): ImagePage {
     throw quotaExceeded()
   }
   return image
-}
-
-/**
- * 上游的数字、HTML 实体与时间在协议边界统一转换。e 站 JSON 里数字的写法不统一：gid 是数字，filecount、rating
- * 这些是字符串（"329"、"4.68"）。两种都收下；缺省、null 和空串都算 0，别让一个没填的字段废掉整批元数据。
- */
-function toMetadata(entry: Record<string, unknown>): GalleryMetadata {
-  const text = (field: string) => {
-    const value = entry[field]
-    return typeof value === "string" ? value : ""
-  }
-  const number = (field: string) => {
-    const value = entry[field]
-    if (value === undefined || value === null || value === "") {
-      return 0
-    }
-    const parsed = Number(value)
-    if (!Number.isFinite(parsed)) {
-      throw unavailable("e 站元数据的格式不对", `${field}=${String(value)}`)
-    }
-    return parsed
-  }
-  return {
-    gid: number("gid"),
-    token: text("token"),
-    title: decodeEntities(text("title")),
-    titleJpn: decodeEntities(text("title_jpn")),
-    category: text("category"),
-    thumbnailUrl: text("thumb"),
-    uploader: text("uploader"),
-    postedAt: new Date(number("posted") * 1000).toISOString(),
-    fileCount: number("filecount"),
-    rating: number("rating"),
-    tags: Array.isArray(entry.tags) ? entry.tags.map((tag) => toTag(decodeEntities(String(tag)))) : [],
-    fileSize: number("filesize"),
-    torrentCount: number("torrentcount"),
-    expunged: entry.expunged === true,
-  }
 }

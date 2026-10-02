@@ -24,7 +24,7 @@ export function activeFilterCount({ categories, minRating }: GalleryFilters): nu
 /**
  * 浏览偏好。
  *
- * 改动当场落进本地那份，保存随后依次发出、只改带来的字段（见 ADR-0006）；存不上就重读一次，以服务端为准。
+ * 改动当场落进本地那份，保存随后依次发出、只改带来的字段（见 ADR-0005）；存不上就重读一次，以服务端为准。
  * 还没读到时界面也不让改（见 EhLayout 与阅读器）。
  */
 export function useGalleryPreferences() {

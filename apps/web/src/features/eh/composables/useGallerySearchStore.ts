@@ -77,7 +77,7 @@ export const useGallerySearchStore = defineStore("GallerySearch", () => {
 
 /**
  * 按标签精确搜的写法，与 e 站自己点标签时一致：值加引号，$ 表示整个标签精确匹配。
- * 临时标签 e 站不带前缀，服务端把它归到 temp（见服务端 eh-client.ts 的 TEMP_NAMESPACE），搜的时候还原成不带前缀。
+ * 临时标签 e 站不带前缀，服务端把它归到 temp（见服务端 upstream/metadata.ts 的 TEMP_NAMESPACE），搜的时候还原成不带前缀。
  */
 export function tagKeyword({ namespace, value }: Pick<GalleryDetail["tags"][number], "namespace" | "value">) {
   return namespace === "temp" ? `"${value}$"` : `${namespace}:"${value}$"`

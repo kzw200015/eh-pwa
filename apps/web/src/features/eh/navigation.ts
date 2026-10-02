@@ -50,11 +50,6 @@ export function readerLocation(gallery: GalleryIdentity, page: number, source: G
   }
 }
 
-/* 默认来源（搜索列表）不写进地址 */
-function sourceQuery(source: GallerySource) {
-  return source === "history" ? { source: "history" } : {}
-}
-
 /**
  * 阅读器页面实例的 key：一本图集一个实例。
  *
@@ -62,4 +57,9 @@ function sourceQuery(source: GallerySource) {
  */
 export function readerInstanceKey(route: RouteLocationNormalized) {
   return route.name === "reader" ? `${String(route.params.gid)}/${String(route.params.token)}` : undefined
+}
+
+/* 默认来源（搜索列表）不写进地址 */
+function sourceQuery(source: GallerySource) {
+  return source === "history" ? { source: "history" } : {}
 }

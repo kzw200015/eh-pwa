@@ -33,7 +33,7 @@ export const readingRoutes = new Hono()
       return c.body(null, 204)
     },
   )
-  /* 这本读到第几页。它不跟详情一起给：详情是上游的元数据，进度是这边高频写、写完就要读到的数据（见 ADR-0006） */
+  /* 这本读到第几页。它不跟详情一起给：详情是上游的元数据，进度是这边高频写、写完就要读到的数据（见 ADR-0005） */
   .get("/progress/:gid", signedIn, validate("param", gidParams), async (c) =>
     c.json(await readingService.progressOf(c.get("userId"), c.req.valid("param").gid)),
   )

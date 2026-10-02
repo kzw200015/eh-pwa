@@ -99,7 +99,7 @@ export const ehPreferences = pgTable(
 )
 
 /*
- * 标签译名：EhTagTranslation 数据库里的一条，整张表由同步整表替换（见 ADR-0005）。
+ * 标签译名：EhTagTranslation 数据库里的一条，整张表由同步整表替换（见 ADR-0004）。
  * namespace 为 rows 的几条是命名空间本身的译名（raw 是命名空间名），这是上游的写法，原样照搬。
  */
 export const ehTagTranslations = pgTable(

@@ -77,6 +77,7 @@ docker compose up -d
 | `ATTACHMENT_TTL`     | `24h`          | 签名图片地址的有效期                                             |
 | `EH_REQUEST_TIMEOUT` | `30s`          | 出网请求的超时，按多久没收到数据算                               |
 | `EH_USER_AGENT`      | 桌面版 Chrome  | 出网请求用的 User-Agent                                          |
+| `LOG_LEVEL`          | `info`         | 日志级别，`debug` 会记下每一个发往 e 站的请求                    |
 | `PORT`               | `8000`         | 监听端口                                                         |
 
 健康检查：`/api/health/live`（进程存活）、`/api/health/ready`（数据库可用）。

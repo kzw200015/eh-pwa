@@ -11,7 +11,7 @@ import { validate } from "@server/validate"
 const searchKeyword = z.object({ keyword: searchHistoryEntrySchema })
 
 /**
- * 本站账号的浏览偏好与搜索历史。写接口都与到达顺序无关（见 ADR-0006）：偏好只改带来的字段，搜索历史一次记或删一个词，
+ * 本站账号的浏览偏好与搜索历史。写接口都与到达顺序无关（见 ADR-0005）：偏好只改带来的字段，搜索历史一次记或删一个词，
  * 排序、去重、留几条由这边做。都只回成败，前端当场按同一条规则改好了本地那份。
  */
 export const preferencesRoutes = new Hono()

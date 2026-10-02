@@ -7,6 +7,14 @@ import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 import type { GallerySlice, ImagePage } from "@server/eh/upstream/parse"
 import { notFound } from "@server/http-error"
 
+/*
+ * 取图链路：从图集定位到某一页真正的图片地址。
+ *
+ * 一页图要先从详情页分片里拿到这页的页令牌，再经 showpage 接口（有 showkey 时）或抓图片页拿到图床地址。
+ * 途中拿到的东西都记下来，顺序翻页时就不必回头再抓：分片顺带给出一整片的页令牌，图片页顺带给出下一页的令牌和 showkey。
+ * 这些一律按上游身份（EhAccess.scope）与图集隔离，换绑凭据就进入新的作用域，不同身份之间不共享页面。
+ */
+
 interface SliceRequest {
   access: EhAccess
   ref: GalleryRef
@@ -15,14 +23,6 @@ interface SliceRequest {
 
 /** 分片大小受账号设置影响（20/40/50），没记过就按 20 猜。 */
 const DEFAULT_SLICE_SIZE = 20
-
-/*
- * 取图链路：从图集定位到某一页真正的图片地址。
- *
- * 一页图要先从详情页分片里拿到这页的页令牌，再经 showpage 接口（有 showkey 时）或抓图片页拿到图床地址。
- * 途中拿到的东西都记下来，顺序翻页时就不必回头再抓：分片顺带给出一整片的页令牌，图片页顺带给出下一页的令牌和 showkey。
- * 这些一律按上游身份（EhAccess.scope）与图集隔离，换绑凭据就进入新的作用域，不同身份之间不共享页面。
- */
 
 /** 评论与第一页图常常同时要同一片：同一片同一时刻只抓一次，抓到后留一会儿给紧跟着的请求用。 */
 const slices = new LRUCache<string, GallerySlice, SliceRequest>({

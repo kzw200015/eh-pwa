@@ -8,7 +8,7 @@ import { useOptimisticData } from "@/shared/api/optimistic"
 /**
  * 账号共享的搜索历史。
  *
- * 一次记或删一个词（见 ADR-0006）：本地当场按共享包里的同一条规则改好，改动随后依次发出，存不上就重读一次。
+ * 一次记或删一个词（见 ADR-0005）：本地当场按共享包里的同一条规则改好，改动随后依次发出，存不上就重读一次。
  * 关键词进来之前已经去过两端空白，和服务端存下的那份一致。
  */
 export function useSearchHistory() {

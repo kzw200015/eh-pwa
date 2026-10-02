@@ -89,6 +89,30 @@ export const decodeEntities = decodeHTMLStrict
  */
 const EMPTY_LIST_MARKERS = ["No hits found", "No unfiltered results"]
 
+/* 预览图格子的宽高，形如 100px */
+const PIXELS = /^(\d+)px$/
+/* 背景简写 `transparent url(…) -200px 0 no-repeat` 里的图片地址与横纵偏移 */
+const BACKGROUND = /url\(([^)]+)\)\s+(-?\d+)(?:px)?\s+(-?\d+)(?:px)?/
+
+/* 评论时间里的英文月份，下标即 Date.UTC 认的月份 */
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+/* HTML 意义上的空白，不含 &nbsp;：评论里用 &nbsp; 刻意排出来的空格要留着 */
+const WHITESPACE = /[ \t\n\r\f]+/g
+
 /**
  * 搜索结果页，只取图集顺序和下一页游标。认不出任何图集、又不是「没有结果」，就是版面改了，返回 null。
  *
@@ -150,34 +174,6 @@ export function parseGallerySlice(html: string, gid: number): GallerySlice {
   }
 }
 
-const PIXELS = /^(\d+)px$/
-/* 背景简写 `transparent url(…) -200px 0 no-repeat` 里的图片地址与横纵偏移 */
-const BACKGROUND = /url\(([^)]+)\)\s+(-?\d+)(?:px)?\s+(-?\d+)(?:px)?/
-
-/**
- * 一格预览图。背景图显示在格子里的一个 div 上（登录后的页面在它外面还多包一层、旁边带着页码，所以按 style 找，不认层级）：
- * 一页一张时背景图就是这一页，偏移为 0；账号设成普通尺寸时是一片拼成的一张图，靠负的背景偏移露出这一页。
- * 认不出尺寸或地址的跳过。
- */
-function parsePreview(link: Cheerio<Element>, page: number): PreviewImage | null {
-  const cell = link.find("div[style]").first()
-  const [, width] = PIXELS.exec(cell.css("width") ?? "") ?? []
-  const [, height] = PIXELS.exec(cell.css("height") ?? "") ?? []
-  const [, imageUrl, x, y] = BACKGROUND.exec(cell.css("background") ?? "") ?? []
-  if (!width || !height || !imageUrl || !x || !y) {
-    return null
-  }
-  return {
-    page,
-    imageUrl: onPublicThumbnailHost(imageUrl),
-    width: Number(width),
-    height: Number(height),
-    /* 背景偏移是负的，换成「从图上哪里裁」；写成 0 的也不留下 -0 */
-    offsetX: Math.abs(Number(x)),
-    offsetY: Math.abs(Number(y)),
-  }
-}
-
 /**
  * 图片页或 showpage 接口的 i3 片段。找不到大图时返回 null。
  *
@@ -207,6 +203,30 @@ export function parseImagePage(html: string): ImagePage | null {
 export function parseNotice(html: string): string | null {
   const text = html.includes("<") ? load(html)("div.d p").first().text() : decodeEntities(html)
   return text.trim().slice(0, 200) || null
+}
+
+/**
+ * 一格预览图。背景图显示在格子里的一个 div 上（登录后的页面在它外面还多包一层、旁边带着页码，所以按 style 找，不认层级）：
+ * 一页一张时背景图就是这一页，偏移为 0；账号设成普通尺寸时是一片拼成的一张图，靠负的背景偏移露出这一页。
+ * 认不出尺寸或地址的跳过。
+ */
+function parsePreview(link: Cheerio<Element>, page: number): PreviewImage | null {
+  const cell = link.find("div[style]").first()
+  const [, width] = PIXELS.exec(cell.css("width") ?? "") ?? []
+  const [, height] = PIXELS.exec(cell.css("height") ?? "") ?? []
+  const [, imageUrl, x, y] = BACKGROUND.exec(cell.css("background") ?? "") ?? []
+  if (!width || !height || !imageUrl || !x || !y) {
+    return null
+  }
+  return {
+    page,
+    imageUrl: onPublicThumbnailHost(imageUrl),
+    width: Number(width),
+    height: Number(height),
+    /* 背景偏移是负的，换成「从图上哪里裁」；写成 0 的也不留下 -0 */
+    offsetX: Math.abs(Number(x)),
+    offsetY: Math.abs(Number(y)),
+  }
 }
 
 /** 分片页面上的评论，外加没列出来的低分评论条数。 */
@@ -240,21 +260,6 @@ function parseComments($: CheerioAPI): GalleryComments {
   return { comments, hiddenCount: numbersIn(threshold)[0] ?? 0 }
 }
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-]
-
 /** .c3 的文字形如 `Posted on 28 May 2022, 01:53 by: 作者`，页面上写的是 UTC。解析不出来是空串，让前端显示占位而不是崩掉。 */
 function parsePostedAt(text: string): string {
   const [, day, monthName, year, hour, minute] =
@@ -265,9 +270,6 @@ function parsePostedAt(text: string): string {
   }
   return new Date(Date.UTC(Number(year), month, Number(day), Number(hour), Number(minute))).toISOString()
 }
-
-/* HTML 意义上的空白，不含 &nbsp;：评论里用 &nbsp; 刻意排出来的空格要留着 */
-const WHITESPACE = /[ \t\n\r\f]+/g
 
 /**
  * 把评论正文拍平成文本、换行与链接片段，交给前端的模板渲染，前端从不插入 HTML。
