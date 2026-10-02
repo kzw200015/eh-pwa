@@ -16,8 +16,8 @@ import {
 } from "@server/eh/upstream/failures"
 import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 import { isAllowedImageUrl } from "@server/eh/upstream/image-hosts"
+import { gdataSchema, type GalleryMetadata } from "@server/eh/upstream/metadata"
 import {
-  decodeEntities,
   parseGalleryList,
   parseGallerySlice,
   parseImagePage,
@@ -29,6 +29,13 @@ import {
 import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
 
+/*
+ * e 站的只读客户端：上游协议、「200 但不是内容」的识别与失败翻译，以及已校验过的图片流。
+ * 出网只有 outbound 这一个出口。
+ */
+
+const logger = createLogger(import.meta.url)
+
 /** 一次搜索的条件，校验见搜索路由上的 schema。 */
 export interface GallerySearch {
   keyword: string
@@ -37,47 +44,6 @@ export interface GallerySearch {
   minRating: GalleryMinRating | null
   /** 空串表示第一页 */
   cursor: string
-}
-
-/** 拆好的标签原文（female:big breasts 拆成 female 与 big breasts），还没套译名。 */
-export interface TagRef {
-  /** e 站给临时标签不带前缀，归到 temp */
-  namespace: string
-  value: string
-}
-
-/** 标准化后的上游元数据：缩略图还是上游原地址、没签成本站的代理地址，标签还没套译名。 */
-export interface GalleryMetadata {
-  gid: number
-  token: string
-  title: string
-  /** 日文原标题，可能为空 */
-  titleJpn: string
-  /** e 站的英文分类名，如 Doujinshi */
-  category: string
-  thumbnailUrl: string
-  uploader: string
-  /** ISO 8601 */
-  postedAt: string
-  fileCount: number
-  rating: number
-  tags: TagRef[]
-  /** 字节数 */
-  fileSize: number
-  torrentCount: number
-  /** 图集是否已被删除 */
-  expunged: boolean
-}
-
-/* e 站给临时标签不带前缀 */
-const TEMP_NAMESPACE = "temp"
-
-/** 标签形如 artist:gentsuki，按第一个冒号拆开；没有冒号的是临时标签。 */
-function toTag(tag: string): TagRef {
-  const index = tag.indexOf(":")
-  return index < 0
-    ? { namespace: TEMP_NAMESPACE, value: tag }
-    : { namespace: tag.slice(0, index), value: tag.slice(index + 1) }
 }
 
 /** 已校验过的图片流，外加转发时要带的响应头。 */
@@ -90,73 +56,15 @@ export interface ImageStream {
   source: string
 }
 
+/** 读进内存的上游响应。 */
+interface UpstreamResponse {
+  url: string
+  status: number
+  body: string
+}
+
 /** 元数据接口一次最多查这么多本。由调用方按它切批，各批各自成败，一批失败不连累别的批。 */
 export const METADATA_BATCH_SIZE = 25
-
-/**
- * e 站 JSON 里数字的写法不统一：gid 是数字，filecount、rating 这些是字符串（"329"、"4.68"）。两种都收下；
- * 缺省、null 和空串都算 0，别让一个没填的字段废掉整批元数据。
- */
-const looseNumber = z
-  .union([z.number(), z.string()])
-  .nullish()
-  .transform((value, ctx) => {
-    if (value === undefined || value === null || value === "") {
-      return 0
-    }
-    const parsed = Number(value)
-    if (!Number.isFinite(parsed)) {
-      ctx.addIssue({ code: "custom", message: `不是数字：${value}` })
-      return z.NEVER
-    }
-    return parsed
-  })
-
-/* 缺省或不是字符串的文字算空串 */
-const looseText = z.string().catch("")
-
-/* 标题与标签里带着 HTML 实体 */
-const entityText = looseText.transform(decodeEntities)
-
-/** 元数据接口里的一本：上游的数字、HTML 实体与时间在协议边界统一转换。 */
-const metadataSchema = z
-  .object({
-    gid: looseNumber,
-    token: looseText,
-    title: entityText,
-    title_jpn: entityText,
-    category: looseText,
-    thumb: looseText,
-    uploader: looseText,
-    posted: looseNumber,
-    filecount: looseNumber,
-    rating: looseNumber,
-    tags: z.array(z.coerce.string().transform((tag) => toTag(decodeEntities(tag)))).catch([]),
-    filesize: looseNumber,
-    torrentcount: looseNumber,
-    expunged: z.boolean().catch(false),
-  })
-  .transform((entry): GalleryMetadata => ({
-    gid: entry.gid,
-    token: entry.token,
-    title: entry.title,
-    titleJpn: entry.title_jpn,
-    category: entry.category,
-    thumbnailUrl: entry.thumb,
-    uploader: entry.uploader,
-    postedAt: new Date(entry.posted * 1000).toISOString(),
-    fileCount: entry.filecount,
-    rating: entry.rating,
-    tags: entry.tags,
-    fileSize: entry.filesize,
-    torrentCount: entry.torrentcount,
-    expunged: entry.expunged,
-  }))
-
-/** 元数据接口的响应。单个图集被删或转私有时，那一条会变成 { gid, error }，解成 null 由调用方跳过，别让整批作废。 */
-const gdataSchema = z.object({
-  gmetadata: z.array(z.union([z.object({ error: z.string().min(1) }).transform(() => null), metadataSchema])),
-})
 
 /** 配额用尽时 e 站不报错，而是把大图换成一张提示图：表站 ehgt.org/g/509.gif，里站 exhentai.org/img/509.gif，小图叫 509s.gif。 */
 const QUOTA_IMAGES = new Set([
@@ -168,20 +76,6 @@ const QUOTA_IMAGES = new Set([
 
 /** 未登录时 home.php 会 302 到论坛登录页，登录成功才是 200：拿它检验一组 Cookie 在表站认不认。 */
 const HOME_URL = `${SITES.e.page}/home.php`
-
-/** 读进内存的上游响应。 */
-interface UpstreamResponse {
-  url: string
-  status: number
-  body: string
-}
-
-/*
- * e 站的只读客户端：上游协议、「200 但不是内容」的识别与失败翻译，以及已校验过的图片流。
- * 出网只有 outbound 这一个出口。
- */
-
-const logger = createLogger(import.meta.url)
 
 export async function search(
   access: EhAccess,

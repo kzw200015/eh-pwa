@@ -5,6 +5,7 @@ import * as attachmentUrls from "@server/eh/attachment-urls"
 import * as tagTranslationService from "@server/eh/tag-translation-service"
 import * as ehClient from "@server/eh/upstream/eh-client"
 import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
+import type { GalleryMetadata } from "@server/eh/upstream/metadata"
 
 /*
  * 图集元数据：统一从表站匿名获取，按图集共享缓存。搜索、详情与阅读历史都经这里补全展示信息。
@@ -18,7 +19,7 @@ import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 
 /** 列表里一张卡片的内容：元数据里给人看的那些，缩略图签成本站的代理地址、标签套上译名 */
 export interface GalleryCard extends Omit<
-  ehClient.GalleryMetadata,
+  GalleryMetadata,
   "thumbnailUrl" | "tags" | "fileSize" | "torrentCount" | "expunged"
 > {
   /** 已经是本站的代理地址，可直接放进 img 的 src */
@@ -27,7 +28,23 @@ export interface GalleryCard extends Omit<
 }
 
 /** 详情接口的返回：比卡片多出几个字段，与卡片的字段平铺在一起。阅读进度另有接口，见 reading-service.ts 的 ReadingProgress */
-export type GalleryDetail = GalleryCard & Pick<ehClient.GalleryMetadata, "fileSize" | "torrentCount" | "expunged">
+export type GalleryDetail = GalleryCard & Pick<GalleryMetadata, "fileSize" | "torrentCount" | "expunged">
+
+/*
+ * 缓存里存的是 Promise。同一轮事件循环里几个请求各自要的也会合进同一批；整批失败时 DataLoader 把这批的 key 移出缓存，
+ * 单本取不到（undefined）照常缓存。
+ */
+const loader = new DataLoader<GalleryRef, GalleryMetadata | undefined, string>(
+  async (refs) => {
+    const found = await ehClient.fetchMetadata([...refs])
+    return refs.map((ref) => found.get(refKey(ref)))
+  },
+  {
+    maxBatchSize: ehClient.METADATA_BATCH_SIZE,
+    cacheKeyFn: refKey,
+    cacheMap: new LRUCache<string, Promise<GalleryMetadata | undefined>>({ max: 500, ttl: 10 * 60_000 }),
+  },
+)
 
 /** 一批图集的卡片，按 refKey 查；元数据取不到的（被删、转私有）不在结果里，整批请求失败则抛出。搜索结果与阅读历史都用它。 */
 export async function cards(refs: GalleryRef[]): Promise<Map<string, GalleryCard>> {
@@ -52,7 +69,13 @@ export async function detail(ref: GalleryRef): Promise<GalleryDetail | undefined
   }
 }
 
-function card(metadata: ehClient.GalleryMetadata, translate: tagTranslationService.Translate): GalleryCard {
+/** 一批图集的元数据，与 refs 一一对应；上游没有的那本（被删、转私有）是 undefined，所在的那批请求失败则抛出 */
+function loadAll(refs: GalleryRef[]): Promise<(GalleryMetadata | undefined)[]> {
+  /* 不用 loadMany：它把失败作为 Error 混进结果里，而这里要整批失败就抛出 */
+  return Promise.all(refs.map((ref) => loader.load(ref)))
+}
+
+function card(metadata: GalleryMetadata, translate: tagTranslationService.Translate): GalleryCard {
   return {
     gid: metadata.gid,
     token: metadata.token,
@@ -66,26 +89,4 @@ function card(metadata: ehClient.GalleryMetadata, translate: tagTranslationServi
     rating: metadata.rating,
     tags: translate(metadata.tags),
   }
-}
-
-/*
- * 缓存里存的是 Promise。同一轮事件循环里几个请求各自要的也会合进同一批；整批失败时 DataLoader 把这批的 key 移出缓存，
- * 单本取不到（undefined）照常缓存。
- */
-const loader = new DataLoader<GalleryRef, ehClient.GalleryMetadata | undefined, string>(
-  async (refs) => {
-    const found = await ehClient.fetchMetadata([...refs])
-    return refs.map((ref) => found.get(refKey(ref)))
-  },
-  {
-    maxBatchSize: ehClient.METADATA_BATCH_SIZE,
-    cacheKeyFn: refKey,
-    cacheMap: new LRUCache<string, Promise<ehClient.GalleryMetadata | undefined>>({ max: 500, ttl: 10 * 60_000 }),
-  },
-)
-
-/** 一批图集的元数据，与 refs 一一对应；上游没有的那本（被删、转私有）是 undefined，所在的那批请求失败则抛出 */
-function loadAll(refs: GalleryRef[]): Promise<(ehClient.GalleryMetadata | undefined)[]> {
-  /* 不用 loadMany：它把失败作为 Error 混进结果里，而这里要整批失败就抛出 */
-  return Promise.all(refs.map((ref) => loader.load(ref)))
 }
