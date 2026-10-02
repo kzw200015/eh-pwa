@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory"
+import { HTTPException } from "hono/http-exception"
 
 import * as tokens from "@server/auth/tokens"
-import { unauthorized } from "@server/http-error"
 
 /*
  * 鉴权边界。身份只认 Authorization 头里的登录令牌，不认请求里的任何 userId。
@@ -18,7 +18,7 @@ import { unauthorized } from "@server/http-error"
 export const signedIn = createMiddleware<{ Variables: { userId: number } }>(async (c, next) => {
   const userId = await tokens.identify(c.req.header("authorization"))
   if (userId === null) {
-    throw unauthorized("请先登录")
+    throw new HTTPException(401, { message: "请先登录" })
   }
   c.set("userId", userId)
   await next()

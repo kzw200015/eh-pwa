@@ -1,6 +1,6 @@
+import { HTTPException } from "hono/http-exception"
 import { z } from "zod"
 
-import { badGateway } from "@server/http-error"
 import { createLogger } from "@server/logger"
 import { outbound } from "@server/outbound"
 import { failureReason } from "@server/outbound-fetch"
@@ -62,5 +62,5 @@ export async function fetchRelease(): Promise<TagTranslationRelease> {
 /** 拉不到或拉到的不对：原因只进日志，前端只看到一句中文。 */
 function unavailable(message: string, detail: unknown) {
   logger.warn(`${message} ${failureReason(detail)}`)
-  return badGateway(message, { cause: detail })
+  return new HTTPException(502, { message, cause: detail })
 }

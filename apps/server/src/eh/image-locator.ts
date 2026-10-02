@@ -1,3 +1,4 @@
+import { HTTPException } from "hono/http-exception"
 import { LRUCache } from "lru-cache"
 
 import type { EhAccess } from "@server/eh/upstream/access"
@@ -5,7 +6,6 @@ import * as ehClient from "@server/eh/upstream/eh-client"
 import { unavailable } from "@server/eh/upstream/failures"
 import { refKey, type GalleryRef } from "@server/eh/upstream/gallery-ref"
 import type { GallerySlice, ImagePage } from "@server/eh/upstream/parse"
-import { notFound } from "@server/http-error"
 
 /*
  * 取图链路：从图集定位到某一页真正的图片地址。
@@ -98,7 +98,7 @@ async function pageTokenOf(access: EhAccess, ref: GalleryRef, page: number): Pro
     return token
   }
   if (slice.pageCount !== null && page > slice.pageCount) {
-    throw notFound(`第 ${page} 页超出了图集的页数（共 ${slice.pageCount} 页）`)
+    throw new HTTPException(404, { message: `第 ${page} 页超出了图集的页数（共 ${slice.pageCount} 页）` })
   }
   let size = slice.sliceSize
   if (size === null) {

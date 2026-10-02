@@ -1,12 +1,12 @@
 import { SQL } from "bun"
 import { eq } from "drizzle-orm"
+import { HTTPException } from "hono/http-exception"
 
 import { users } from "@server/auth/auth-tables"
 import { hashPassword, verifyPassword } from "@server/auth/passwords"
 import * as tokens from "@server/auth/tokens"
 import { env } from "@server/config"
 import { database } from "@server/database/connection"
-import { badRequest } from "@server/http-error"
 import { createLogger } from "@server/logger"
 
 /* 本站账号：注册、登录与「我是谁」。 */
@@ -51,7 +51,7 @@ export function options(): AuthOptions {
 /** 注册成功即登录。 */
 export async function register({ username, password }: Credentials): Promise<Authenticated> {
   if (!registrationOpen) {
-    throw badRequest("本站已关闭注册")
+    throw new HTTPException(400, { message: "本站已关闭注册" })
   }
   const passwordHash = await hashPassword(password)
   /* 判重交给唯一索引而不是先查再插：先查再插在两个并发请求之间是有窗口的 */
@@ -65,7 +65,7 @@ export async function register({ username, password }: Credentials): Promise<Aut
         error.cause instanceof SQL.PostgresError &&
         error.cause.errno === UNIQUE_VIOLATION
       ) {
-        throw badRequest("用户名已被占用")
+        throw new HTTPException(400, { message: "用户名已被占用" })
       }
       throw error
     })
@@ -81,7 +81,7 @@ export async function register({ username, password }: Credentials): Promise<Aut
 export async function login({ username, password }: Credentials): Promise<Authenticated> {
   const [user] = await database.select().from(users).where(eq(users.username, username))
   if (!(await verifyPassword(password, user?.passwordHash ?? null)) || !user) {
-    throw badRequest("用户名或密码错误")
+    throw new HTTPException(400, { message: "用户名或密码错误" })
   }
   return authenticated(user)
 }
