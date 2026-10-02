@@ -24,8 +24,7 @@ function call(index: number) {
   return { url: new URL(url), init, headers: new Headers(init.headers) }
 }
 
-const failure = (status: number, message: string | string[]) =>
-  Response.json({ statusCode: status, message, error: "Bad Request" }, { status })
+const failure = (status: number, message: string) => Response.json({ code: status, message }, { status })
 
 describe("HTTP 边界", () => {
   it("带上查询参数、鉴权头和 JSON 请求体", async () => {
@@ -66,8 +65,8 @@ describe("HTTP 边界", () => {
     expect(await request(api.eh.history.$delete())).toBeUndefined()
   })
 
-  it("校验失败时的一组文案连成一句", async () => {
-    fetch.mockImplementation(async () => failure(400, ["页码不合法", "上报方标识不合法"]))
+  it("失败时使用后端错误文案", async () => {
+    fetch.mockImplementation(async () => failure(400, "页码不合法；上报方标识不合法"))
     await expect(request(api.eh.history.$delete())).rejects.toThrow(new Error("页码不合法；上报方标识不合法"))
   })
 

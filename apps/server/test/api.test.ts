@@ -71,7 +71,7 @@ describe("鉴权边界", () => {
     for (const path of ["/api/unknown", "/api", "/nowhere"]) {
       const response = await t.http.get(path)
       expect(response.status).toBe(404)
-      expect(response.body).toEqual({ statusCode: 404, message: "这个地址不存在", error: "Not Found" })
+      expect(response.body).toEqual({ code: 404, message: "这个地址不存在" })
     }
     expect((await t.http.get("/api/eh/progress").set(auth)).status).toBe(404)
   })
@@ -83,17 +83,17 @@ describe("鉴权边界", () => {
       .set("Content-Type", "application/json")
       .send("{")
     expect(response.status).toBe(400)
-    expect(response.body).toMatchObject({ statusCode: 400, error: "Bad Request" })
+    expect(response.body).toMatchObject({ code: 400 })
   })
 
   it("路径上的数字不是正整数、超出范围都回 400，文案与请求体里的同一项一致", async () => {
     for (const gid of ["abc", "1.5", "0", "-1", "0x10", "9223372036854775808", "9999999999999999"]) {
       const response = await t.http.delete(`/api/eh/history/${gid}`).set(auth)
       expect(response.status, gid).toBe(400)
-      expect(response.body.message).toEqual(["图集编号不合法"])
+      expect(response.body.message).toEqual("图集编号不合法")
     }
     const badToken = await t.http.get("/api/eh/galleries/1/NOTATOKEN").set(auth)
-    expect(badToken.body.message).toEqual(["图集令牌不合法"])
+    expect(badToken.body.message).toEqual("图集令牌不合法")
   })
 })
 

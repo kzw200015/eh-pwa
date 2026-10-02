@@ -98,7 +98,7 @@ describe("签名地址", () => {
     const missing = new URL(url)
     missing.searchParams.delete("s")
     const response = await t.http.get(`${missing.pathname}${missing.search}`)
-    expect([response.status, response.body.message]).toEqual([400, ["图片地址缺少签名参数"]])
+    expect([response.status, response.body.message]).toEqual([400, "图片地址缺少签名参数"])
   })
 
   it("同一窗口里签出的地址一模一样，有效期不短于配置值，过期后不再放行、重新签一份就能接着取图", async () => {

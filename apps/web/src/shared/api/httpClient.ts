@@ -105,16 +105,12 @@ function offline(error: unknown) {
 }
 
 /*
- * 失败时给界面看的那句话。有本站响应体就用它的 message（一组文案时连成一句）；
+ * 失败时给界面看的那句话。有本站响应体就用它的 message；
  * 没有的（反向代理返回的空体或 HTML）只说状态码。
  */
 function describeFailure(status: unknown, body: unknown) {
   const message = typeof body === "object" && body !== null && "message" in body ? body.message : undefined
-  const joined = Array.isArray(message) ? message.join("；") : message
-  if (typeof joined === "string" && joined) {
-    return joined
-  }
-  return `服务器返回了 HTTP ${String(status)}`
+  return typeof message === "string" && message ? message : `服务器返回了 HTTP ${String(status)}`
 }
 
 function readStoredToken(): string {

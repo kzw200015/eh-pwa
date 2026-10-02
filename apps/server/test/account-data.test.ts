@@ -82,11 +82,11 @@ describe("绑定 e 站账号", () => {
       const response = await t.http.post("/api/eh/credential").set(auth).send({ ipbMemberId: "1", ipbPassHash: bad })
       expect([response.status, response.body.message]).toEqual([
         400,
-        ["Cookie 值里有不允许的字符，检查是不是多复制了分号、空格或引号"],
+        "Cookie 值里有不允许的字符，检查是不是多复制了分号、空格或引号",
       ])
     }
     const empty = await t.http.post("/api/eh/credential").set(auth).send({ ipbMemberId: "", ipbPassHash: "abc" })
-    expect([empty.status, empty.body.message]).toEqual([400, ["ipb_member_id 和 ipb_pass_hash 都不能为空"]])
+    expect([empty.status, empty.body.message]).toEqual([400, "ipb_member_id 和 ipb_pass_hash 都不能为空"])
     expect(t.outbound.requests.length).toBe(before)
   })
 
@@ -190,7 +190,7 @@ describe("偏好与搜索历史", () => {
     ]
     for (const [request, message] of cases) {
       const response = await request.set(auth)
-      expect([response.status, response.body.message]).toEqual([400, [message]])
+      expect([response.status, response.body.message]).toEqual([400, message])
     }
   })
 })

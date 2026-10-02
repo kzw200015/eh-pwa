@@ -28,7 +28,7 @@ export const app = new Hono()
   .route("/api", new Hono().route("/auth", authRoutes).route("/eh", ehRoutes).route("/health", healthRoutes))
   .route("/", staticFiles)
   /*
-   * 所有失败都回成 `{statusCode, message, error}`。可预期的失败自己带着状态码与文案（入参不合格见 validate.ts）；
+   * 所有失败都回成 `{code, message}`。可预期的失败自己带着状态码与文案（入参不合格见 validate.ts）；
    * 未预料的异常回 500，原文只进日志。
    */
   .onError((error, c) => {

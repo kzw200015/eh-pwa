@@ -102,7 +102,7 @@ describe("搜索", () => {
       [{ cursor: "1&f_cats=0" }, "分页游标不合法"],
     ] as const) {
       const response = await search(body)
-      expect([response.status, response.body.message]).toEqual([400, [message]])
+      expect([response.status, response.body.message]).toEqual([400, message])
     }
     expect(t.outbound.requests).toEqual([])
   })
@@ -412,7 +412,7 @@ describe("预览图", () => {
     eh(() => undefined)
     for (const slice of ["-1", "1.5", "abc"]) {
       const response = await previews(900900, "0123456789", slice)
-      expect([response.status, response.body.message], slice).toEqual([400, ["分片序号不合法"]])
+      expect([response.status, response.body.message], slice).toEqual([400, "分片序号不合法"])
     }
     expect(t.outbound.requests).toHaveLength(0)
   })
