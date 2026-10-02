@@ -1,4 +1,5 @@
-import { badGateway, badRequest, HttpError, notFound, tooManyRequests } from "@server/http-error"
+import { HTTPException } from "hono/http-exception"
+
 import { createLogger } from "@server/logger"
 import { failureReason } from "@server/outbound-fetch"
 
@@ -18,30 +19,32 @@ const logger = createLogger(import.meta.url)
 /** 上游返回了意料之外的东西，通常是版面改了。message 给用户看，detail 只进日志。 */
 export function unavailable(message: string, detail?: unknown) {
   log(message, detail)
-  return badGateway(message, { cause: detail })
+  return new HTTPException(502, { message, cause: detail })
 }
 
-export const quotaExceeded = () => tooManyRequests("e 站图片配额已用尽，等额度恢复后再试")
+export const quotaExceeded = () => new HTTPException(429, { message: "e 站图片配额已用尽，等额度恢复后再试" })
 
 export function banned(url: string) {
   log("出口 IP 被 e 站临时封禁", `url=${url}`)
-  return tooManyRequests("本机访问 e 站过于频繁已被临时限制，请过几分钟再试")
+  return new HTTPException(429, { message: "本机访问 e 站过于频繁已被临时限制，请过几分钟再试" })
 }
 
 /** 里站返回了空页面：Cookie 无效、过期，或账号没有里站权限。这要用户自己去处理，不应混同于上游故障。 */
-export const sadPanda = () => badRequest("里站没有放行这次请求，检查一下绑定的 Cookie 是否仍然有效")
+export const sadPanda = () =>
+  new HTTPException(400, { message: "里站没有放行这次请求，检查一下绑定的 Cookie 是否仍然有效" })
 
 /** 撞上内容警告插页。请求里固定带了 nw=1，还撞上说明 e 站改了这套机制。 */
 export const contentWarning = (url: string) => unavailable("e 站返回了内容警告页，nw cookie 可能已失效", `url=${url}`)
 
 /** 用户贴进来的那组 Cookie 拿去实际请求过一次，上游没认。 */
-export const credentialRejected = () => badRequest("这组 Cookie 用不了，确认一下是否复制完整、是否已经过期")
+export const credentialRejected = () =>
+  new HTTPException(400, { message: "这组 Cookie 用不了，确认一下是否复制完整、是否已经过期" })
 
 /** 图集在元数据接口里查不到：被删、转私有，或者 gid/token 对不上。 */
-export const galleryMissing = () => notFound("这个图集取不到，可能已被删除或转为私有")
+export const galleryMissing = () => new HTTPException(404, { message: "这个图集取不到，可能已被删除或转为私有" })
 
 /** e 站用一段说明代替了页面：图集被删或转私有、令牌不对、页码越界。说明原文照转，它比我们猜的准。 */
-export const upstreamNotice = (text: string) => notFound(`e 站提示：${text}`)
+export const upstreamNotice = (text: string) => new HTTPException(404, { message: `e 站提示：${text}` })
 
 /** 图片流开始转发之后上游断了。 */
 export const imageBroken = (url: string, cause: unknown) => unavailableAt("图片传到一半，e 站那边断了", url, cause)
@@ -55,22 +58,22 @@ export const unreachable = (url: string, cause: unknown) =>
  * 或者回的是空的，也算。
  * 大图遇到它可以换一台节点重试一次；缩略图和重试后仍失败的，就按上游故障报告。
  */
-export class ImageNodeFailure extends HttpError {
-  constructor(message: string, options?: ErrorOptions) {
-    super(502, message, options)
+export class ImageNodeFailure extends HTTPException {
+  constructor(message: string, cause: unknown) {
+    super(502, { message, cause })
   }
 }
 
 export function imageNodeFailure(url: string, detail: unknown) {
   const message = "图床节点取不到这张图"
   log(message, `url=${url} ${failureReason(detail)}`)
-  return new ImageNodeFailure(message, { cause: detail })
+  return new ImageNodeFailure(message, detail)
 }
 
 /** 与某个上游地址有关的失败：日志里带上地址，排查时才知道是哪台主机、哪个页面。 */
 function unavailableAt(message: string, url: string, detail: unknown) {
   log(message, `url=${url} ${failureReason(detail)}`)
-  return badGateway(message, { cause: detail })
+  return new HTTPException(502, { message, cause: detail })
 }
 
 function log(message: string, detail: unknown) {

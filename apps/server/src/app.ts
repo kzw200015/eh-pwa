@@ -5,7 +5,6 @@ import { logger as requestLogger } from "hono/logger"
 import { authRoutes } from "@server/auth/auth-routes"
 import { ehRoutes } from "@server/eh/eh-routes"
 import { healthRoutes } from "@server/health/health-routes"
-import { badRequest, HttpError, notFound } from "@server/http-error"
 import { createLogger } from "@server/logger"
 import { staticFiles } from "@server/static-files"
 
@@ -28,26 +27,17 @@ export const app = new Hono()
   .route("/api", new Hono().route("/auth", authRoutes).route("/eh", ehRoutes).route("/health", healthRoutes))
   .route("/", staticFiles)
   /*
-   * 所有失败都回成 `{code, message}`。可预期的失败自己带着状态码与文案（入参不合格见 validate.ts）；
-   * 未预料的异常回 500，原文只进日志。
+   * 所有失败都回成 `{code, message}`，code 与 HTTP 状态码相同。可预期的失败抛 HTTPException，自己带着状态码与给用户看的
+   * 文案（入参不合格见 validate.ts）；未预料的异常回 500，原文只进日志。
    */
   .onError((error, c) => {
-    let failure: HttpError
-    if (error instanceof HttpError) {
-      failure = error
-    } else if (error instanceof HTTPException && error.status === 400) {
-      /* Hono 自己抛的 400 只有请求体解析不了这一种：本站的请求体只收 JSON */
-      failure = badRequest("请求体不是合法的 JSON")
-    } else {
+    if (!(error instanceof HTTPException)) {
       logger.error(error, "未预料的异常")
-      failure = new HttpError(500, "服务器出错了")
+      return c.json({ code: 500, message: "服务器出错了" }, 500)
     }
-    return c.json(failure.body, failure.status)
+    return c.json({ code: error.status, message: error.message }, error.status)
   })
   /* /api 下写错的路径、方法不对的请求，以及找不到的静态文件，拿到的都是 JSON 的 404 而不是一个页面 */
-  .notFound((c) => {
-    const failure = notFound("这个地址不存在")
-    return c.json(failure.body, failure.status)
-  })
+  .notFound((c) => c.json({ code: 404, message: "这个地址不存在" }, 404))
 
 export type App = typeof app

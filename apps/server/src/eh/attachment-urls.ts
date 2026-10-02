@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "node:crypto"
+import { HTTPException } from "hono/http-exception"
 
 import { env } from "@server/config"
 import type { GalleryRef } from "@server/eh/upstream/gallery-ref"
-import { forbidden } from "@server/http-error"
 import { isDecimal } from "@server/numeric"
 import { attachmentKey } from "@server/signing"
 
@@ -35,7 +35,7 @@ export function image(userId: number, ref: GalleryRef, page: number): string {
 export function checkThumbnail(encoded: string, signature: Signature): string {
   const raw = Buffer.from(encoded, "base64url").toString()
   if (!verify(raw, signature)) {
-    throw forbidden("缩略图地址签名不正确或已过期")
+    throw new HTTPException(403, { message: "缩略图地址签名不正确或已过期" })
   }
   return raw
 }
@@ -43,7 +43,7 @@ export function checkThumbnail(encoded: string, signature: Signature): string {
 /** 签名覆盖了 uid：改地址上的 uid 冒充别人就对不上，否则拿到一条地址就能用别人的 e 站凭据取图。 */
 export function checkImage(userId: number, ref: GalleryRef, page: number, signature: Signature) {
   if (!verify(imageSubject(userId, ref, page), signature)) {
-    throw forbidden("图片地址签名不正确或已过期")
+    throw new HTTPException(403, { message: "图片地址签名不正确或已过期" })
   }
 }
 
