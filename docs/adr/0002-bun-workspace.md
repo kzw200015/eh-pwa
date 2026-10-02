@@ -7,7 +7,7 @@
 几处取舍：
 
 - **前端工具链留在 Node**：vue-tsc 要靠 Node 的模块加载改写 TypeScript，在 Bun 下认不出 `.vue`。Bun 只负责装依赖、启动脚本，Vite、vue-tsc、前端的 Vitest 按 shebang 跑在 Node 上。
-- **出网的超时自己计，不用 Bun fetch 的 `timeout` 选项**：它按套接字算空闲、4 秒一档取整，表达不了「只在调用方来读时计时」。连接阶段约 10 秒的超时靠 Bun fetch 的默认行为（实测，文档未写明）。
+- **出网的超时自己计，Bun fetch 自带的套接字空闲超时关掉**（`timeout: false`）：它按套接字算空闲、4 秒一档取整，表达不了「只在调用方来读时计时」，不关的话默认 5 分钟的上限还会叠在外面。连接阶段约 10 秒的超时靠 Bun fetch 的默认行为（实测，文档未写明）。
 
 ## Consequences
 
