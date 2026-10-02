@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import { logger as requestLogger } from "hono/logger"
@@ -18,11 +19,11 @@ const logger = createLogger(import.meta.url)
 export const app = new Hono()
   /*
    * Hono 自带的请求日志，只挂在 /api 下，前端静态文件不记。转进 pino，并去掉查询串：图片地址的查询串里是签名。
-   * 图片接口是边读边转发的，耗时只算到开始发图。
+   * 它不看是不是终端、只认 NO_COLOR，给状态码加的着色符也在这里去掉。图片接口是边读边转发的，耗时只算到开始发图。
    */
   .use(
     "/api/*",
-    requestLogger((line) => logger.info(line.replace(/\?\S*/, ""))),
+    requestLogger((line) => logger.info(stripVTControlCharacters(line).replace(/\?\S*/, ""))),
   )
   .route("/api", new Hono().route("/auth", authRoutes).route("/eh", ehRoutes).route("/health", healthRoutes))
   .route("/", staticFiles)

@@ -4,7 +4,7 @@
 
 ## 结构
 
-代码在 `src/`，顶层按领域分模块：`auth`、`eh`，与前端的 feature 一一对应；另有 `health/`（Kubernetes 的探针：`live` 不碰任何依赖，`ready` 查一次数据库）。基础设施各是一个文件或目录：`config.ts`（环境变量）、`numeric.ts`（从字符串认数字）、`validate.ts`（按 zod schema 校验入参）、`database/`（连接池与启动时迁移 `connection.ts`、建表共用的列 `columns.ts`）、`outbound.ts` 与 `outbound-fetch.ts`（出网：进程里用的那一份与测试的替换口、真实的实现）、`signing.ts`（用 HKDF 从主密钥派生子密钥）、`logger.ts`（日志，底下是 pino；`/api` 下的请求日志由 `app.ts` 挂上 Hono 自带的 `hono/logger`，转进 pino 并去掉查询串）、`static-files.ts`（前端的静态文件）。迁移文件在 `drizzle/`，测试在 `test/`。镜像里前端产物放在 `client/`，由本服务一并提供静态文件。
+代码在 `src/`，顶层按领域分模块：`auth`、`eh`，与前端的 feature 一一对应；另有 `health/`（Kubernetes 的探针：`live` 不碰任何依赖，`ready` 查一次数据库）。基础设施各是一个文件或目录：`config.ts`（环境变量）、`numeric.ts`（从字符串认数字）、`validate.ts`（按 zod schema 校验入参）、`database/`（连接池与启动时迁移 `connection.ts`、建表共用的列 `columns.ts`）、`outbound.ts` 与 `outbound-fetch.ts`（出网：进程里用的那一份与测试的替换口、真实的实现）、`signing.ts`（用 HKDF 从主密钥派生子密钥）、`logger.ts`（日志，底下是 pino；`/api` 下的请求日志由 `app.ts` 挂上 Hono 自带的 `hono/logger`，转进 pino，去掉查询串与着色符）、`static-files.ts`（前端的静态文件）。迁移文件在 `drizzle/`，测试在 `test/`。镜像里前端产物放在 `client/`，由本服务一并提供静态文件。
 
 没有依赖注入，也不装配对象图：模块本身就是单例。基础设施在被导入时按配置建好——`config.ts` 导出校验过的 `env`，`database/connection.ts` 导出整个进程共用的 `database`，`outbound.ts` 导出 `outbound`，`signing.ts` 导出两把子密钥——用到的模块直接 import。服务是一组导出函数的模块，进程内的缓存与状态是模块顶层的常量或变量；调用方用命名空间导入（`import * as galleryService from "@server/eh/gallery-service"`），调用处写 `galleryService.search(…)`，一眼看得出是哪个模块的。路由是模块级的 Hono 实例（`*-routes.ts`），只写本组内的路径，前缀由挂它的一方给：`eh` 的几组由 `eh-routes.ts` 汇总，`app.ts` 把各领域挂到 `/api` 下，并导出前端据以推断接口的 `App` 类型。路由一路链式写下来，拆成几条语句的话 `App` 类型里就没有后面那些接口了。`server.ts` 先执行迁移，再用 `Bun.serve` 开始监听；`main.ts` 给它端口、收到 SIGTERM 时关停。
 
